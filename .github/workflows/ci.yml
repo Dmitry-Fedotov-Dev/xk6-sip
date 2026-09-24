@@ -32,3 +32,19 @@ jobs:
           go install go.k6.io/xk6@latest
           xk6 build v2.3.0 --with github.com/Dmitry-Fedotov-Dev/xk6-sip=. --output k6
           ./k6 version
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # xk6 lint checks tags
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: xk6 lint
+        run: |
+          go install go.k6.io/xk6@latest
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          xk6 lint --k6-repo go.k6.io/k6/v2

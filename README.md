@@ -7,6 +7,12 @@ through the system under test and check what arrives on the other side.
 Status: signalling only (REGISTER, INVITE/CANCEL/BYE, digest auth). RTP is
 not implemented yet; SDP carries a placeholder media port.
 
+## Compatibility
+
+| xk6-sip | k6 | Go |
+|---|---|---|
+| v0.1.x | v2.x (built and tested with v2.3.0) | 1.26+ |
+
 ## Build and run
 
 ```sh

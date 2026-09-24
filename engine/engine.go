@@ -5,6 +5,7 @@ package engine
 
 import (
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 
@@ -43,7 +44,7 @@ type Engine struct {
 }
 
 func New(opts Options) *Engine {
-	if opts.ReadBufferSize == 0 {
+	if opts.ReadBufferSize <= 0 || opts.ReadBufferSize > math.MaxUint16 {
 		opts.ReadBufferSize = 4096
 	}
 	if opts.RingTimeout == 0 {
@@ -57,6 +58,7 @@ func New(opts Options) *Engine {
 	}
 	// Process-wide setting in sipgo, read by every socket reader, so it is
 	// set once by the first engine.
+	// #nosec G115 -- range checked above
 	bufferSizeOnce.Do(func() { sip.TransportBufferReadSize = uint16(opts.ReadBufferSize) })
 
 	e := &Engine{

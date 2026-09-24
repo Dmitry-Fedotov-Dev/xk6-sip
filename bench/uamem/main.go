@@ -7,6 +7,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"runtime"
@@ -50,7 +51,7 @@ func newSubscriber(ctx context.Context, ip string) (*subscriber, error) {
 		return nil, err
 	}
 	srv.OnOptions(func(req *sip.Request, tx sip.ServerTransaction) {
-		tx.Respond(sip.NewResponseFromRequest(req, 200, "OK", nil))
+		_ = tx.Respond(sip.NewResponseFromRequest(req, 200, "OK", nil))
 	})
 	go srv.ServeUDP(pc)
 	return &subscriber{port: port, ua: ua, cl: cl, srv: srv}, nil
@@ -68,7 +69,11 @@ func main() {
 	buf := flag.Int("buf", 32768, "sip.TransportBufferReadSize")
 	ping := flag.Bool("ping", false, "each subscriber sends OPTIONS to its neighbour")
 	flag.Parse()
-	sip.TransportBufferReadSize = uint16(*buf)
+	if *buf <= 0 || *buf > math.MaxUint16 {
+		fmt.Fprintln(os.Stderr, "-buf must be 1..65535")
+		os.Exit(2)
+	}
+	sip.TransportBufferReadSize = uint16(*buf) // #nosec G115 -- range checked above
 
 	ctx := context.Background()
 	h0, s0 := heapMB()

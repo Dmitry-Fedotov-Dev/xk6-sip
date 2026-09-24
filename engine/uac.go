@@ -252,7 +252,7 @@ func (u *uacDialog) ack() error {
 	retrans := ack.Clone()
 	u.tx.OnRetransmission(func(r *sip.Response) {
 		if r.IsSuccess() {
-			u.d.client.WriteRequest(retrans)
+			u.d.logErr("ACK retransmission", u.d.client.WriteRequest(retrans))
 		}
 	})
 	return nil

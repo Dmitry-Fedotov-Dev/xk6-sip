@@ -86,13 +86,13 @@ func Start(cfg Config) (*PBX, error) {
 		sipgo.WithUserAgentTransactionLayerOptions(sip.WithTransactionLayerLogger(cfg.Logger)),
 		sipgo.WithUserAgentTransportLayerOptions(sip.WithTransportLayerLogger(cfg.Logger)))
 	if err != nil {
-		pc.Close()
+		_ = pc.Close()
 		return nil, err
 	}
 	srv, err := sipgo.NewServer(ua, sipgo.WithServerLogger(cfg.Logger))
 	if err != nil {
-		ua.Close()
-		pc.Close()
+		_ = ua.Close()
+		_ = pc.Close()
 		return nil, err
 	}
 	cl, err := sipgo.NewClient(ua,
@@ -101,8 +101,8 @@ func Start(cfg Config) (*PBX, error) {
 		sipgo.WithClientPort(la.Port),
 		sipgo.WithClientConnectionAddr(addr))
 	if err != nil {
-		ua.Close()
-		pc.Close()
+		_ = ua.Close()
+		_ = pc.Close()
 		return nil, err
 	}
 
@@ -135,7 +135,7 @@ func Start(cfg Config) (*PBX, error) {
 	srv.OnAck(p.onAck)
 	srv.OnBye(p.onBye)
 	srv.OnOptions(func(req *sip.Request, tx sip.ServerTransaction) {
-		tx.Respond(sip.NewResponseFromRequest(req, 200, "OK", nil))
+		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 200, "OK", nil)))
 	})
 	go srv.ServeUDP(pc)
 	return p, nil
@@ -146,8 +146,8 @@ func (p *PBX) Addr() string   { return p.addr }
 func (p *PBX) Domain() string { return p.cfg.Domain }
 
 func (p *PBX) Close() {
-	p.ua.Close()
-	p.pc.Close()
+	_ = p.ua.Close()
+	_ = p.pc.Close()
 }
 
 // Registered reports whether user currently has a binding.
@@ -163,7 +163,7 @@ func (p *PBX) onRegister(req *sip.Request, tx sip.ServerTransaction) {
 	name := req.To().Address.User
 	u := p.users[name]
 	if u == nil {
-		tx.Respond(sip.NewResponseFromRequest(req, 404, "Not Found", nil))
+		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 404, "Not Found", nil)))
 		return
 	}
 	if p.cfg.AuthRegister && !p.authorized(req, tx, u, "Authorization", 401) {
@@ -199,7 +199,7 @@ func (p *PBX) onRegister(req *sip.Request, tx sip.ServerTransaction) {
 		c.Params.Add("expires", strconv.Itoa(expires))
 		res.AppendHeader(&c)
 	}
-	tx.Respond(res)
+	p.logErr("respond", tx.Respond(res))
 }
 
 // authorized checks digest credentials in hdr, challenging with code if they
@@ -228,7 +228,7 @@ func (p *PBX) authorized(req *sip.Request, tx sip.ServerTransaction, u *User, hd
 	}
 	res := sip.NewResponseFromRequest(req, code, reason, nil)
 	res.AppendHeader(sip.NewHeader(name, chal.String()))
-	tx.Respond(res)
+	p.logErr("respond", tx.Respond(res))
 	return false
 }
 
@@ -242,14 +242,14 @@ func qopList(q string) []string {
 func (p *PBX) onInvite(req *sip.Request, tx sip.ServerTransaction) {
 	if to := req.To(); to != nil && to.Params.Has("tag") {
 		// In-dialog re-INVITE: not bridged in this minimal PBX.
-		tx.Respond(sip.NewResponseFromRequest(req, 488, "Not Acceptable Here", nil))
+		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 488, "Not Acceptable Here", nil)))
 		return
 	}
 	p.Stats.Invites.Add(1)
 
 	caller := p.users[req.From().Address.User]
 	if caller == nil {
-		tx.Respond(sip.NewResponseFromRequest(req, 403, "Forbidden", nil))
+		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 403, "Forbidden", nil)))
 		return
 	}
 	if p.cfg.AuthInvite && !p.authorized(req, tx, caller, "Proxy-Authorization", 407) {
@@ -260,24 +260,24 @@ func (p *PBX) onInvite(req *sip.Request, tx sip.ServerTransaction) {
 		callee = p.users[req.Recipient.User]
 	}
 	if callee == nil {
-		tx.Respond(sip.NewResponseFromRequest(req, 404, "Not Found", nil))
+		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 404, "Not Found", nil)))
 		return
 	}
 	p.mu.Lock()
 	target, ok := p.regs[callee.Name]
 	p.mu.Unlock()
 	if !ok {
-		tx.Respond(sip.NewResponseFromRequest(req, 480, "Temporarily Unavailable", nil))
+		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 480, "Temporarily Unavailable", nil)))
 		return
 	}
 
 	a, err := p.dialogUA.ReadInvite(req, tx)
 	if err != nil {
-		tx.Respond(sip.NewResponseFromRequest(req, 400, "Bad Request", nil))
+		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 400, "Bad Request", nil)))
 		return
 	}
 	defer a.Close()
-	a.Respond(100, "Trying", nil)
+	p.logErr("respond", a.Respond(100, "Trying", nil))
 
 	// B leg: new Call-ID, caller ID = caller's extension.
 	breq := sip.NewRequest(sip.INVITE, target)
@@ -293,7 +293,7 @@ func (p *PBX) onInvite(req *sip.Request, tx sip.ServerTransaction) {
 	defer cancel()
 	b, err := p.dialogUA.WriteInvite(ctx, breq)
 	if err != nil {
-		a.Respond(503, "Service Unavailable", nil)
+		p.logErr("respond", a.Respond(503, "Service Unavailable", nil))
 		return
 	}
 	br := &bridge{a: a, b: b}
@@ -311,7 +311,7 @@ func (p *PBX) onInvite(req *sip.Request, tx sip.ServerTransaction) {
 	err = b.WaitAnswer(ctx, sipgo.AnswerOptions{
 		OnResponse: func(res *sip.Response) error {
 			if res.StatusCode == 180 || res.StatusCode == 183 {
-				a.Respond(res.StatusCode, res.Reason, nil)
+				p.logErr("respond", a.Respond(res.StatusCode, res.Reason, nil))
 			}
 			return nil
 		},
@@ -321,24 +321,24 @@ func (p *PBX) onInvite(req *sip.Request, tx sip.ServerTransaction) {
 		var re *sipgo.ErrDialogResponse
 		switch {
 		case errors.As(err, &re):
-			a.Respond(re.Res.StatusCode, re.Res.Reason, nil)
+			p.logErr("respond", a.Respond(re.Res.StatusCode, re.Res.Reason, nil))
 		case a.Context().Err() != nil:
 			// A cancelled; the transaction layer already sent 487.
 		default:
-			a.Respond(408, "Request Timeout", nil)
+			p.logErr("respond", a.Respond(408, "Request Timeout", nil))
 		}
 		return
 	}
 	if err := b.Ack(context.Background()); err != nil {
 		cleanup()
-		a.Respond(500, "Server Internal Error", nil)
+		p.logErr("respond", a.Respond(500, "Server Internal Error", nil))
 		return
 	}
 	p.Stats.Answered.Add(1)
 	if err := a.WriteResponse(sip.NewSDPResponseFromRequest(a.InviteRequest, b.InviteResponse.Body())); err != nil {
 		p.log.Warn("answer A leg", "error", err)
 		cleanup()
-		b.Bye(context.Background())
+		p.logErr("dialog", b.Bye(context.Background()))
 	}
 }
 
@@ -362,14 +362,14 @@ func (p *PBX) bridgeFor(req *sip.Request) (*bridge, bool) {
 
 func (p *PBX) onAck(req *sip.Request, tx sip.ServerTransaction) {
 	if br, fromA := p.bridgeFor(req); br != nil && fromA {
-		br.a.ReadAck(req, tx)
+		p.logErr("dialog", br.a.ReadAck(req, tx))
 	}
 }
 
 func (p *PBX) onBye(req *sip.Request, tx sip.ServerTransaction) {
 	br, fromA := p.bridgeFor(req)
 	if br == nil {
-		tx.Respond(sip.NewResponseFromRequest(req, 481, "Call/Transaction Does Not Exist", nil))
+		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 481, "Call/Transaction Does Not Exist", nil)))
 		return
 	}
 	p.mu.Lock()
@@ -380,12 +380,12 @@ func (p *PBX) onBye(req *sip.Request, tx sip.ServerTransaction) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if fromA {
-		br.a.ReadBye(req, tx)
+		p.logErr("dialog", br.a.ReadBye(req, tx))
 		if err := br.b.Bye(ctx); err != nil {
 			p.log.Warn("BYE to B", "error", err)
 		}
 	} else {
-		br.b.ReadBye(req, tx)
+		p.logErr("dialog", br.b.ReadBye(req, tx))
 		if err := br.a.Bye(ctx); err != nil {
 			p.log.Warn("BYE to A", "error", err)
 		}
@@ -393,3 +393,9 @@ func (p *PBX) onBye(req *sip.Request, tx sip.ServerTransaction) {
 }
 
 func (p *PBX) String() string { return fmt.Sprintf("testpbx(%s)", p.addr) }
+
+func (p *PBX) logErr(what string, err error) {
+	if err != nil {
+		p.log.Debug("testpbx: "+what+" failed", "error", err)
+	}
+}

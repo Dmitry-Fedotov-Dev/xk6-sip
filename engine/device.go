@@ -207,13 +207,13 @@ func (d *Device) open() error {
 		sipgo.WithUserAgentTransactionLayerOptions(sip.WithTransactionLayerLogger(d.eng.log)),
 		sipgo.WithUserAgentTransportLayerOptions(sip.WithTransportLayerLogger(d.eng.log)))
 	if err != nil {
-		pc.Close()
+		_ = pc.Close()
 		return err
 	}
 	srv, err := sipgo.NewServer(ua, sipgo.WithServerLogger(d.eng.log))
 	if err != nil {
-		ua.Close()
-		pc.Close()
+		_ = ua.Close()
+		_ = pc.Close()
 		return err
 	}
 	cl, err := sipgo.NewClient(ua,
@@ -224,8 +224,8 @@ func (d *Device) open() error {
 		// Via port and the client would open a socket per destination.
 		sipgo.WithClientConnectionAddr(hostPort))
 	if err != nil {
-		ua.Close()
-		pc.Close()
+		_ = ua.Close()
+		_ = pc.Close()
 		return err
 	}
 
@@ -242,7 +242,7 @@ func (d *Device) open() error {
 	srv.OnAck(d.onAck)
 	srv.OnBye(d.onBye)
 	ok := func(req *sip.Request, tx sip.ServerTransaction) {
-		tx.Respond(sip.NewResponseFromRequest(req, 200, "OK", nil))
+		d.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 200, "OK", nil)))
 	}
 	srv.OnOptions(ok)
 	srv.OnNotify(ok)
@@ -263,7 +263,7 @@ func waitListening(ua *sipgo.UserAgent, hostPort string) error {
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		if c, err := ua.TransportLayer().GetConnection("udp", hostPort); err == nil && c != nil {
-			c.TryClose() // GetConnection took a reference
+			_, _ = c.TryClose() // GetConnection took a reference
 			return nil
 		}
 		if time.Now().After(deadline) {
@@ -278,10 +278,10 @@ func (d *Device) close() {
 		d.cancel()
 	}
 	if d.ua != nil {
-		d.ua.Close()
+		_ = d.ua.Close()
 	}
 	if d.pc != nil {
-		d.pc.Close()
+		_ = d.pc.Close()
 	}
 	d.ua, d.pc = nil, nil
 }
@@ -315,7 +315,7 @@ func (d *Device) Destroy() {
 	d.regMu.Unlock()
 	if wasRegistered {
 		ctx, cancel := context.WithTimeout(d.ctx, 5*time.Second)
-		d.register(ctx, 0)
+		d.logErr("unregister", d.register(ctx, 0))
 		cancel()
 	}
 	d.close()
@@ -369,6 +369,7 @@ func (d *Device) register(ctx context.Context, expires int) error {
 	}
 	if err != nil {
 		d.registered = false
+		// #nosec G404 -- retry jitter, not security sensitive
 		d.scheduleRefresh(time.Duration(5+rand.IntN(25)) * time.Second)
 		return err
 	}
@@ -376,6 +377,7 @@ func (d *Device) register(ctx context.Context, expires int) error {
 	granted := grantedExpires(res, &d.contact, expires)
 	// Refresh at 80-95% of the lifetime so subscribers created together do
 	// not refresh together.
+	// #nosec G404 -- refresh jitter, not security sensitive
 	d.scheduleRefresh(time.Duration(float64(granted) * (0.80 + 0.15*rand.Float64()) * float64(time.Second)))
 	return nil
 }
@@ -470,7 +472,7 @@ func (d *Device) onAck(req *sip.Request, tx sip.ServerTransaction) {
 	if c := d.findCall(req); c != nil {
 		c.trace.msg(false, req)
 		if c.uas != nil {
-			c.uas.ReadAck(req, tx)
+			d.logErr("ACK", c.uas.ReadAck(req, tx))
 		}
 	}
 }
@@ -478,7 +480,7 @@ func (d *Device) onAck(req *sip.Request, tx sip.ServerTransaction) {
 func (d *Device) onBye(req *sip.Request, tx sip.ServerTransaction) {
 	c := d.findCall(req)
 	if c == nil {
-		tx.Respond(sip.NewResponseFromRequest(req, 481, "Call/Transaction Does Not Exist", nil))
+		d.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 481, "Call/Transaction Does Not Exist", nil)))
 		return
 	}
 	c.trace.msg(false, req)
@@ -489,7 +491,7 @@ func (d *Device) onBye(req *sip.Request, tx sip.ServerTransaction) {
 		err = c.uas.ReadBye(req, tx)
 	}
 	if err != nil {
-		tx.Respond(sip.NewResponseFromRequest(req, 481, "Call/Transaction Does Not Exist", nil))
+		d.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 481, "Call/Transaction Does Not Exist", nil)))
 		return
 	}
 	c.trace.note(true, "SIP/2.0 200 OK (BYE)")
@@ -503,7 +505,7 @@ func (d *Device) onInvite(req *sip.Request, tx sip.ServerTransaction) {
 	}
 	sess, err := d.dialogUA.ReadInvite(req, tx)
 	if err != nil {
-		tx.Respond(sip.NewResponseFromRequest(req, 400, "Bad Request", nil))
+		d.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 400, "Bad Request", nil)))
 		return
 	}
 	c := newCall(d, Incoming)
@@ -532,17 +534,17 @@ func (d *Device) onInvite(req *sip.Request, tx sip.ServerTransaction) {
 			c.answer(sess)
 			return
 		}
-		sess.Respond(dec.code, dec.reason, nil)
+		d.logErr("respond", sess.Respond(dec.code, dec.reason, nil))
 		c.trace.note(true, "SIP/2.0 %d %s", dec.code, dec.reason)
 		c.finish(EndedByLocal, dec.code, dec.reason)
 	case <-sess.Context().Done():
 		c.trace.note(false, "CANCEL")
 		c.finish(EndedByRemote, 487, "CANCEL")
 	case <-timeout.C:
-		sess.Respond(480, "Temporarily Unavailable", nil)
+		d.logErr("respond", sess.Respond(480, "Temporarily Unavailable", nil))
 		c.finish(EndedByTimeout, 480, "ring timeout")
 	case <-d.ctx.Done():
-		sess.Respond(480, "Temporarily Unavailable", nil)
+		d.logErr("respond", sess.Respond(480, "Temporarily Unavailable", nil))
 		c.finish(EndedByLocal, 480, "device destroyed")
 	}
 }
@@ -552,13 +554,13 @@ func (d *Device) onInvite(req *sip.Request, tx sip.ServerTransaction) {
 func (d *Device) onReInvite(req *sip.Request, tx sip.ServerTransaction) {
 	c := d.findCall(req)
 	if c == nil {
-		tx.Respond(sip.NewResponseFromRequest(req, 481, "Call/Transaction Does Not Exist", nil))
+		d.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 481, "Call/Transaction Does Not Exist", nil)))
 		return
 	}
 	c.trace.msg(false, req)
 	res := sip.NewSDPResponseFromRequest(req, sdpAudio(d.ip, d.mediaPort()))
 	res.AppendHeader(sip.HeaderClone(&d.contact))
-	tx.Respond(res)
+	d.logErr("respond", tx.Respond(res))
 	c.trace.msg(true, res)
 }
 
@@ -748,4 +750,12 @@ func normalizeNumber(s string) string {
 		}
 		return r
 	}, s)
+}
+
+// logErr logs failures of best-effort sends (responses, ACKs) that have no
+// caller to report to.
+func (d *Device) logErr(what string, err error) {
+	if err != nil {
+		d.eng.log.Debug("sip: "+what+" failed", "device", d.cfg.ID, "error", err)
+	}
 }

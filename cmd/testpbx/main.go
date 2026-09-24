@@ -79,18 +79,18 @@ func main() {
 }
 
 func writeCSV(path string, pbx *testpbx.PBX, users []testpbx.User) error {
+	// #nosec G304 -- the path is the operator's -csv flag
 	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
 	w := csv.NewWriter(f)
-	w.Write([]string{"device", "registrar", "user", "pass", "expires", "ext"})
+	rows := [][]string{{"device", "registrar", "user", "pass", "expires", "ext"}}
 	for _, u := range users {
-		w.Write([]string{"phone-" + u.Name, "sip:" + pbx.Addr(), u.Name + "@" + pbx.Domain(), u.Password, "300", u.Ext})
+		rows = append(rows, []string{"phone-" + u.Name, "sip:" + pbx.Addr(), u.Name + "@" + pbx.Domain(), u.Password, "300", u.Ext})
 	}
-	w.Flush()
-	if err := w.Error(); err != nil {
-		f.Close()
+	if err := w.WriteAll(rows); err != nil {
+		_ = f.Close()
 		return err
 	}
 	return f.Close()
