@@ -25,6 +25,7 @@ type RootModule struct {
 	opts    moduleOptions
 	engine  *engine.Engine
 	metrics *sipMetrics
+	audio   audioCache
 }
 
 type moduleOptions struct {
@@ -70,6 +71,8 @@ func (mi *ModuleInstance) Exports() modules.Exports {
 		"Device":   mi.newDevice,
 		"options":  mi.options,
 		"shutdown": mi.shutdown,
+		"audio":    mi.audio,
+		"tone":     mi.tone,
 	}}
 }
 
@@ -106,9 +109,15 @@ func (mi *ModuleInstance) options(v sobek.Value) {
 	o.engine.TraceBodies = boolField(rt, obj, "trace", o.engine.TraceBodies)
 	o.expectTimeout = durationField(rt, obj, "expectTimeout", o.expectTimeout)
 	o.deviceTag = boolField(rt, obj, "deviceTag", o.deviceTag)
+	o.engine.Media, _ = mediaFields(rt, obj, o.engine.Media)
 
-	if r.engine != nil && o.engine != r.opts.engine {
+	if r.engine != nil && !sameEngineOptions(o.engine, r.opts.engine) {
 		common.Throw(rt, errors.New("sip.options: engine options cannot change after the first device was used"))
 	}
 	r.opts = o
+}
+
+func sameEngineOptions(a, b engine.Options) bool {
+	return a.LocalIP == b.LocalIP && a.RegisterRate == b.RegisterRate && a.RingTimeout == b.RingTimeout &&
+		a.TraceBodies == b.TraceBodies && sameMedia(a.Media, b.Media)
 }

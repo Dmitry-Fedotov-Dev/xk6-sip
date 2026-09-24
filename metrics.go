@@ -21,6 +21,11 @@ type sipMetrics struct {
 	inviteDelivery   *metrics.Metric
 	registrations    *metrics.Metric
 	expectedFailures *metrics.Metric
+	rtpSent          *metrics.Metric
+	rtpReceived      *metrics.Metric
+	rtpLost          *metrics.Metric
+	rtpJitter        *metrics.Metric
+	rtpAudioHeard    *metrics.Metric
 }
 
 func registerMetrics(reg *metrics.Registry) (*sipMetrics, error) {
@@ -42,6 +47,11 @@ func registerMetrics(reg *metrics.Registry) (*sipMetrics, error) {
 		{&m.inviteDelivery, "sip_invite_delivery_time", metrics.Trend, metrics.Time},
 		{&m.registrations, "sip_registrations", metrics.Counter, metrics.Default},
 		{&m.expectedFailures, "sip_expect_failed", metrics.Counter, metrics.Default},
+		{&m.rtpSent, "rtp_packets_sent", metrics.Counter, metrics.Default},
+		{&m.rtpReceived, "rtp_packets_received", metrics.Counter, metrics.Default},
+		{&m.rtpLost, "rtp_packets_lost", metrics.Counter, metrics.Default},
+		{&m.rtpJitter, "rtp_jitter", metrics.Trend, metrics.Time},
+		{&m.rtpAudioHeard, "rtp_audio_heard", metrics.Rate, metrics.Default},
 	} {
 		if *d.dst, err = reg.NewMetric(d.name, d.typ, d.vt); err != nil {
 			return nil, err
@@ -130,4 +140,23 @@ func (o *vuObserver) IncomingCall(e engine.IncomingCallEvent) {
 
 func (o *vuObserver) expectFailed(what string) {
 	o.push(o.m.expectedFailures, 1, map[string]string{"expect": what})
+}
+
+// Media is reported once per call leg when a connected call ends.
+// rtp_audio_heard is the share of legs that received any audio: below 1
+// means one-way or no audio.
+func (o *vuObserver) Media(e engine.MediaEvent) {
+	st := e.Stats
+	tags := map[string]string{"codec": st.Codec, "direction": e.Direction.String()}
+	o.push(o.m.rtpSent, float64(st.PacketsSent), tags)
+	o.push(o.m.rtpReceived, float64(st.PacketsReceived), tags)
+	o.push(o.m.rtpLost, float64(st.PacketsLost), tags)
+	if st.PacketsReceived > 1 {
+		o.push(o.m.rtpJitter, ms(st.Jitter), tags)
+	}
+	heard := 0.0
+	if st.Heard > 0 {
+		heard = 1
+	}
+	o.push(o.m.rtpAudioHeard, heard, tags)
 }

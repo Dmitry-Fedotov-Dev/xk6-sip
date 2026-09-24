@@ -36,7 +36,13 @@ export default function () {
     inc.accept();
     check(out.expectConnected('5s'), { 'A connected': (ok) => ok });
     check(inc.expectConnected('5s'), { 'B connected': (ok) => ok });
-    sleep(2);
+
+    check(inc.isHeard('3s'), { 'B hears A': (ok) => ok });
+    check(out.isHeard('3s'), { 'A hears B': (ok) => ok });
+    check(out.codec(), { 'codec negotiated': (c) => c !== null });
+    out.sendDTMF('123#');
+    check(inc.expectDTMF('123#', '3s'), { 'B got DTMF 123#': (ok) => ok });
+    sleep(1);
     inc.hangup();
     check(out.expectDisconnected('5s'), { 'A disconnected': (ok) => ok });
   } else {
@@ -47,6 +53,8 @@ export default function () {
   if (gotCall) {
     console.log(`B leg, caller ${inc.remote()}:\n${inc.trace()}`);
     console.log('how completed: ' + JSON.stringify(out.howCompleted()));
+    console.log('A media: ' + JSON.stringify(out.mediaStats()));
+    console.log('B media: ' + JSON.stringify(inc.mediaStats()));
   }
 }
 

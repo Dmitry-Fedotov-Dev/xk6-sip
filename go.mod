@@ -6,6 +6,7 @@ require (
 	github.com/emiago/sipgo v1.6.0
 	github.com/grafana/sobek v0.0.0-20260908083152-4698bc773ae7
 	github.com/icholy/digest v1.1.0
+	github.com/pion/sdp/v3 v3.0.20
 	go.k6.io/k6/v2 v2.3.0
 	golang.org/x/time v0.16.0
 )
@@ -29,6 +30,7 @@ require (
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mstoykov/atlas v0.0.0-20220811071828-388f114305dd // indirect
+	github.com/pion/randutil v0.1.0 // indirect
 	github.com/serenize/snaker v0.0.0-20201027110005-a7ad2135616e // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/afero v1.1.2 // indirect

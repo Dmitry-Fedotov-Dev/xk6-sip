@@ -28,8 +28,10 @@ type Options struct {
 	RingTimeout time.Duration
 	// TraceBodies keeps full messages in call traces, not only start lines.
 	TraceBodies bool
-	Observer    Observer
-	Logger      *slog.Logger
+	// Media are the defaults for calls; devices and calls can override them.
+	Media    MediaOptions
+	Observer Observer
+	Logger   *slog.Logger
 }
 
 var bufferSizeOnce sync.Once

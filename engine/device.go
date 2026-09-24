@@ -14,6 +14,8 @@ import (
 
 	"github.com/emiago/sipgo"
 	"github.com/emiago/sipgo/sip"
+
+	"github.com/Dmitry-Fedotov-Dev/xk6-sip/media"
 )
 
 // DeviceConfig describes one subscriber.
@@ -31,6 +33,8 @@ type DeviceConfig struct {
 	// Identities are the numbers this subscriber is known by, e.g.
 	// {"ext": "701", "onk": "+79101110011"}. Scripts refer to them by key.
 	Identities map[string]string
+	// Media overrides the engine's media defaults for this device.
+	Media *MediaOptions
 	// Observer overrides the engine's observer for this device's events,
 	// e.g. to route metrics to the k6 VU that owns the device.
 	Observer Observer
@@ -474,6 +478,9 @@ func (d *Device) onAck(req *sip.Request, tx sip.ServerTransaction) {
 		if c.uas != nil {
 			d.logErr("ACK", c.uas.ReadAck(req, tx))
 		}
+		if c.ackSDP && len(req.Body()) > 0 {
+			c.ackAnswer(req.Body())
+		}
 	}
 }
 
@@ -514,6 +521,14 @@ func (d *Device) onInvite(req *sip.Request, tx sip.ServerTransaction) {
 	c.remote = callerNumber(req)
 	c.tStart = time.Now()
 	c.trace.msg(false, req)
+	if mo := d.mediaOptions(nil); !mo.Disabled {
+		if err := c.setupIncomingMedia(req.Body(), mo); err != nil {
+			d.logErr("respond", sess.Respond(488, "Not Acceptable Here", nil))
+			c.trace.note(true, "SIP/2.0 488 Not Acceptable Here (%v)", err)
+			c.finish(EndedByLocal, 488, err.Error())
+			return
+		}
+	}
 	d.addCall(c)
 
 	if err := sess.Respond(180, "Ringing", nil); err != nil {
@@ -549,8 +564,8 @@ func (d *Device) onInvite(req *sip.Request, tx sip.ServerTransaction) {
 	}
 }
 
-// onReInvite answers in-dialog INVITEs (hold, session refresh) with our SDP.
-// TODO(media): apply the new direction to the RTP stream.
+// onReInvite answers in-dialog INVITEs (hold, session refresh) and applies
+// the new offer to the RTP stream.
 func (d *Device) onReInvite(req *sip.Request, tx sip.ServerTransaction) {
 	c := d.findCall(req)
 	if c == nil {
@@ -558,7 +573,7 @@ func (d *Device) onReInvite(req *sip.Request, tx sip.ServerTransaction) {
 		return
 	}
 	c.trace.msg(false, req)
-	res := sip.NewSDPResponseFromRequest(req, sdpAudio(d.ip, d.mediaPort()))
+	res := sip.NewSDPResponseFromRequest(req, c.reofferAnswer(req.Body()))
 	res.AppendHeader(sip.HeaderClone(&d.contact))
 	d.logErr("respond", tx.Respond(res))
 	c.trace.msg(true, res)
@@ -639,6 +654,8 @@ type CallOptions struct {
 	// Timeout is the no-answer timeout after which the call is cancelled.
 	Timeout time.Duration
 	Label   string
+	// Media overrides the device's media options for this call.
+	Media *MediaOptions
 }
 
 // Call sends INVITE and returns immediately; the call progresses in the
@@ -665,10 +682,19 @@ func (d *Device) Call(opts CallOptions) (*Call, error) {
 		req.AppendHeader(sip.NewHeader(k, v))
 	}
 	req.AppendHeader(sip.NewHeader("Content-Type", "application/sdp"))
-	req.SetBody(sdpAudio(d.ip, d.mediaPort()))
 	req.SetDestination(d.proxyAddr)
 
 	c := newCall(d, Outgoing)
+	if mo := d.mediaOptions(opts.Media); mo.Disabled {
+		req.SetBody(d.placeholderSDP())
+	} else {
+		st, err := d.newStream(mo)
+		if err != nil {
+			return nil, err
+		}
+		c.media = st
+		req.SetBody(st.Offer(media.SendRecv))
+	}
 	c.label = opts.Label
 	c.remote = opts.Target
 	c.uac = newUAC(d, req)
@@ -703,9 +729,6 @@ func (d *Device) targetURI(target string) (sip.Uri, error) {
 	}
 	return sip.Uri{Scheme: "sip", User: user, Host: host}, nil
 }
-
-// mediaPort is a placeholder until the media layer allocates RTP sockets.
-func (d *Device) mediaPort() int { return d.port + 2 }
 
 func localIPFor(hostPort string) (string, error) {
 	conn, err := net.Dial("udp", hostPort)

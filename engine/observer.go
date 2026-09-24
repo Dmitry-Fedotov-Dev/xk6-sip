@@ -10,6 +10,7 @@ type Observer interface {
 	CallSetup(CallSetupEvent)
 	CallEnd(CallEndEvent)
 	IncomingCall(IncomingCallEvent)
+	Media(MediaEvent)
 }
 
 // RequestEvent is one client transaction that got a final response or failed.
@@ -67,3 +68,4 @@ func (NopObserver) Request(RequestEvent)           {}
 func (NopObserver) CallSetup(CallSetupEvent)       {}
 func (NopObserver) CallEnd(CallEndEvent)           {}
 func (NopObserver) IncomingCall(IncomingCallEvent) {}
+func (NopObserver) Media(MediaEvent)               {}

@@ -8,6 +8,8 @@ import (
 
 	"github.com/emiago/sipgo"
 	"github.com/emiago/sipgo/sip"
+
+	"github.com/Dmitry-Fedotov-Dev/xk6-sip/media"
 )
 
 type Direction int
@@ -67,6 +69,10 @@ type Call struct {
 	cancelReq  chan struct{} // closed to CANCEL an outgoing INVITE
 	cancelOnce sync.Once
 	decision   chan decision
+
+	media     *media.Stream
+	answerSDP []byte // our SDP for the 200 OK of an incoming call
+	ackSDP    bool   // INVITE had no offer: the answer comes in the ACK
 
 	mu        sync.Mutex
 	state     State
@@ -184,28 +190,34 @@ func (c *Call) finish(by EndedBy, status int, reason string) {
 	c.reason = reason
 	c.tEnd = time.Now()
 	dur := c.tEnd.Sub(c.tAnswer)
-	close(c.done)
 	c.mu.Unlock()
 
 	c.dev.removeCall(c)
+	c.closeMedia(wasConnected)
 	if wasConnected {
 		c.dev.observer().CallEnd(CallEndEvent{
 			Device: c.dev.cfg.ID, Direction: c.dir, Duration: dur, EndedBy: by,
 		})
 	}
+	// Wake waiters last, so metrics are recorded when the script moves on.
+	close(c.done)
 }
 
 // answer sends 200 OK and waits for ACK. Runs in the INVITE handler.
 func (c *Call) answer(sess *sipgo.DialogServerSession) {
-	d := c.dev
 	now := time.Now()
-	res := sip.NewSDPResponseFromRequest(sess.InviteRequest, sdpAudio(d.ip, d.mediaPort()))
+	body := c.answerSDP
+	if body == nil {
+		body = c.dev.placeholderSDP()
+	}
+	res := sip.NewSDPResponseFromRequest(sess.InviteRequest, body)
 	c.trace.msg(true, res)
 	if err := sess.WriteResponse(res); err != nil {
 		c.finish(EndedByError, 0, "answer: "+err.Error())
 		return
 	}
 	c.markConnected(now)
+	c.startMedia()
 }
 
 // Accept answers a ringing incoming call. The 200 OK/ACK exchange happens in
@@ -368,6 +380,9 @@ func (c *Call) runOutgoing(noAnswer time.Duration) {
 		setup.Success = !r.cancelled
 		d.observer().CallSetup(setup)
 		c.markConnected(now)
+		if !r.cancelled {
+			c.startMedia()
+		}
 		if r.cancelled {
 			// Answered while we were cancelling: the answer won the race,
 			// so hang up the established call.

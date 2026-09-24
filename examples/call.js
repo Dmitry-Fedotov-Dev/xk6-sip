@@ -3,6 +3,7 @@
 //
 //   testpbx -users 200 -csv examples/subscribers.csv
 //   ./k6 run examples/call.js
+//   ./k6 run -e VUS=500 -e HOLD=10 -e DURATION=1m examples/call.js  (needs -users >= 2*VUS)
 import sip from 'k6/x/sip';
 import { SharedArray } from 'k6/data';
 import { check, sleep } from 'k6';
@@ -10,11 +11,16 @@ import papaparse from 'https://jslib.k6.io/papaparse/5.1.1/index.js';
 
 export const options = {
   scenarios: {
-    calls: { executor: 'constant-vus', vus: 10, duration: '30s' },
+    calls: {
+      executor: 'constant-vus',
+      vus: Number(__ENV.VUS || 10),
+      duration: __ENV.DURATION || '30s',
+    },
   },
   thresholds: {
     sip_call_success: ['rate>0.99'],
     sip_call_setup_time: ['p(95)<500'],
+    rtp_audio_heard: ['rate>0.99'], // no one-way audio
   },
 };
 
@@ -46,7 +52,8 @@ export default function () {
     return;
   }
 
-  sleep(1 + Math.random());
+  check(inc.isHeard('2s'), { 'B hears A': (ok) => ok });
+  sleep(Number(__ENV.HOLD || 1) + Math.random()); // talk time, s
   inc.hangup();
   check(out.expectDisconnected('5s'), { 'A disconnected': (ok) => ok });
   sleep(0.5);

@@ -16,6 +16,7 @@ var deviceKeys = map[string]bool{
 	"device": true, "registrar": true, "proxy": true, "user": true,
 	"authUser": true, "pass": true, "password": true, "expires": true,
 	"register": true, "displayName": true,
+	"media": true, "codecs": true, "audio": true, "heardLevel": true,
 }
 
 // jsDevice is the script-facing Device:
@@ -59,6 +60,9 @@ func (mi *ModuleInstance) newDevice(call sobek.ConstructorCall) *sobek.Object {
 
 	root := mi.root
 	obs := &vuObserver{vu: mi.vu, m: root.metrics, deviceTag: root.opts.deviceTag}
+	if mo, changed := mediaFields(rt, obj, root.opts.engine.Media); changed {
+		cfg.Media = &mo
+	}
 	cfg.Observer = obs
 	dev, err := root.getEngine().NewDevice(cfg)
 	if err != nil {
@@ -137,6 +141,9 @@ func (d *jsDevice) Call(v sobek.Value) sobek.Value {
 		Timeout: durationField(rt, obj, "timeout", 0),
 		Label:   stringField(rt, obj, "id", ""),
 		Headers: headersField(rt, obj),
+	}
+	if mo, changed := mediaFields(rt, obj, d.dev.MediaOptions()); changed {
+		opts.Media = &mo
 	}
 	// The callee must be registered to receive the call.
 	if callee := deviceArg(obj.Get("callee")); callee != nil && !callee.start() {

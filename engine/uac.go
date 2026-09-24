@@ -88,6 +88,7 @@ func (u *uacDialog) run(c *Call, cancel <-chan struct{}, noAnswer time.Duration)
 		case res := <-u.tx.Responses():
 			now := time.Now()
 			c.trace.msg(false, res)
+			c.remoteSDP(res)
 			switch {
 			case res.IsProvisional():
 				provisional = true

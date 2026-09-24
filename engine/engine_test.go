@@ -15,6 +15,7 @@ type recorder struct {
 	setups   []engine.CallSetupEvent
 	ends     []engine.CallEndEvent
 	incoming []engine.IncomingCallEvent
+	media    []engine.MediaEvent
 }
 
 func (r *recorder) Request(e engine.RequestEvent) {
@@ -35,6 +36,11 @@ func (r *recorder) CallEnd(e engine.CallEndEvent) {
 func (r *recorder) IncomingCall(e engine.IncomingCallEvent) {
 	r.mu.Lock()
 	r.incoming = append(r.incoming, e)
+	r.mu.Unlock()
+}
+func (r *recorder) Media(e engine.MediaEvent) {
+	r.mu.Lock()
+	r.media = append(r.media, e)
 	r.mu.Unlock()
 }
 
@@ -122,7 +128,18 @@ func TestCallAnswerHangup(t *testing.T) {
 	if !out.ExpectConnected(wait) || !in.ExpectConnected(wait) {
 		t.Fatalf("not connected:\nout:\n%s\nin:\n%s", engine.FormatLadder(out.Trace()), engine.FormatLadder(in.Trace()))
 	}
-	time.Sleep(50 * time.Millisecond)
+	if !in.WaitHeard(wait) || !out.WaitHeard(wait) {
+		t.Fatal("no audio in one direction")
+	}
+	if out.Codec() != "PCMU" || in.Codec() != "PCMU" {
+		t.Errorf("codecs %q/%q", out.Codec(), in.Codec())
+	}
+	if err := out.SendDTMF("5#", 0); err != nil {
+		t.Fatal(err)
+	}
+	if !in.WaitDigits("5#", wait) {
+		t.Fatalf("callee got DTMF %q", in.Digits())
+	}
 	if !in.Hangup() {
 		t.Fatal("hangup failed")
 	}
@@ -145,6 +162,15 @@ func TestCallAnswerHangup(t *testing.T) {
 	if len(rec.ends) != 2 {
 		t.Errorf("want 2 call end events, got %+v", rec.ends)
 	}
+	if len(rec.media) != 2 {
+		t.Fatalf("want 2 media events, got %+v", rec.media)
+	}
+	for _, m := range rec.media {
+		if m.Stats.PacketsReceived == 0 || m.Stats.PacketsLost != 0 {
+			t.Errorf("%s leg media %+v", m.Direction, m.Stats)
+		}
+	}
+	t.Logf("media: %+v", rec.media)
 	t.Logf("setup=%v pdd=%v delivery=%v", rec.setups[0].SetupTime, rec.setups[0].PDD, rec.incoming[0].Delivery)
 	t.Logf("caller ladder:\n%s", engine.FormatLadder(out.Trace()))
 }
@@ -212,5 +238,30 @@ func TestUnknownTarget(t *testing.T) {
 	out, _ := a.Call(engine.CallOptions{Target: "999"})
 	if out.ExpectConnected(wait) || out.Status() != 404 {
 		t.Fatalf("status %d, want 404", out.Status())
+	}
+}
+
+func TestCallWithoutMedia(t *testing.T) {
+	_, _, rec, a, b := setup(t)
+	b.Start()
+	out, _ := a.Call(engine.CallOptions{Target: "702", Media: &engine.MediaOptions{Disabled: true}})
+	in, _ := b.ExpectCall(engine.CallMatch{Caller: "701"}, wait)
+	if in == nil {
+		t.Fatal("no incoming call")
+	}
+	in.Accept()
+	if !out.ExpectConnected(wait) {
+		t.Fatal("not connected")
+	}
+	// B has media and sends towards A's placeholder port; A has none.
+	if out.Codec() != "" || out.WaitHeard(200*time.Millisecond) {
+		t.Error("caller without media reports audio")
+	}
+	out.Hangup()
+	in.ExpectDisconnected(wait)
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.media) != 1 || rec.media[0].Direction != engine.Incoming {
+		t.Errorf("media events %+v", rec.media)
 	}
 }
