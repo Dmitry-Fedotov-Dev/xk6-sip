@@ -5,14 +5,15 @@ subscribers: each VU owns real SIP devices that register, call each other
 through the system under test and check what arrives on the other side.
 
 Status: REGISTER, INVITE/CANCEL/BYE with digest auth; RTP with G.711
-(PCMU/PCMA), RFC 3550 loss/jitter, RFC 4733 DTMF and audio detection.
-Hold, transfer and PRACK are next.
+(PCMU/PCMA), RFC 3550 loss/jitter, RFC 4733 DTMF and audio detection;
+hold/resume, blind and attended transfer (REFER, Replaces), PRACK (100rel)
+and session timers.
 
 ## Compatibility
 
 | xk6-sip | k6 | Go |
 |---|---|---|
-| v0.1.x – v0.2.x | v2.x (built and tested with v2.3.0) | 1.26+ |
+| v0.1.x – v0.3.x | v2.x (built and tested with v2.3.0) | 1.26+ |
 
 ## Build and run
 
@@ -56,6 +57,8 @@ Call: `accept`, `reject(code?, reason?)`, `hangup`, `expectRinging`,
 `expectConnected`, `expectDisconnected` (optional timeout), `state`,
 `status`, `remote`, `howCompleted`, `trace` (SIP ladder), `callId`,
 `codec`, `isHeard`, `sendDTMF`, `expectDTMF`, `receivedDTMF`, `mediaStats`.
+Call control: `hold`, `unhold`, `isOnHold`, `isRemoteHold`, `transfer(dest, aon?)`,
+`attendedTransfer(consultCall)`, `expectTransferred`, `expectReferredCall`.
 
 Only `expect*` methods wait, so one VU can drive both ends of a call.
 
@@ -79,6 +82,42 @@ out.mediaStats();                  // {codec, sent, received, lost, jitter, hear
 
 Media options (`media`, `codecs`, `audio: sip.audio(...) | sip.tone(freq, dbfs) | 'silence'`,
 `heardLevel`) can be set in `sip.options()`, per Device and per call.
+
+### Hold and transfer
+
+```js
+inc.hold();                         // re-INVITE a=sendonly; out.isRemoteHold() === true
+inc.unhold();
+
+inc.transfer(ua3);                  // blind: REFER to ua3's ext (or '703', or (ua3, 'onk'))
+inc.expectTransferred('10s');        // final NOTIFY says 2xx
+
+const consult = ua2.call({ callee: ua3 }); /* ... answered ... */
+inc.attendedTransfer(consult);      // REFER with Replaces
+```
+
+PBXs that handle REFER themselves (B2BUA, hosted PBX) keep the transferee's
+call and re-INVITE its media; when REFER reaches the endpoint instead, the
+device places the new call itself (`call.expectReferredCall()`) and answers
+INVITEs with Replaces automatically.
+
+Device options: `prack: true` sends 180 reliably (RFC 3262) when the caller
+supports it (reliable 18x from the PBX are always PRACKed);
+`sessionExpires: 1800` requests session timers (RFC 4028; refreshes and
+422 are handled, a call whose peer stops refreshing is hung up).
+
+## Functional tests
+
+`examples/functional/` holds call-flow tests (basic call with DTMF, hold,
+blind and attended transfer) for one VU and one iteration: any failed step
+stops the scenario, k6 exits non-zero and writes a JUnit report.
+
+```sh
+bin/testpbx -addr 127.0.0.1:5070 -users 3
+bin/k6 run -e JUNIT=report.xml examples/functional/attended-transfer.js
+# against a real PBX:
+bin/k6 run -e REGISTRAR=sip:pbx:5060 -e A_USER=701@pbx -e A_PASS=... -e A_EXT=701 ... examples/functional/hold.js
+```
 
 ## Metrics
 

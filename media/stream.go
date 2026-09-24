@@ -218,6 +218,13 @@ func (s *Stream) Start() {
 	s.shard = s.cfg.Scheduler.add(s)
 }
 
+// Direction is our current media direction.
+func (s *Stream) Direction() Direction {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.dir
+}
+
 // SetDirection changes what we send/receive, e.g. sendonly for hold.
 func (s *Stream) SetDirection(d Direction) {
 	s.mu.Lock()

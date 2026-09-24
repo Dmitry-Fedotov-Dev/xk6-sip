@@ -163,6 +163,9 @@ func (c *Call) reofferAnswer(offer []byte) []byte {
 	if len(offer) > 0 {
 		if r, err := media.ParseSDP(offer); err == nil {
 			c.trace.note(false, "re-INVITE: remote %s", r.Dir)
+			c.mu.Lock()
+			c.remoteHold = r.Dir == media.SendOnly || r.Dir == media.Inactive
+			c.mu.Unlock()
 			return c.media.Update(r)
 		}
 	}

@@ -1,7 +1,10 @@
 package xk6sip
 
 import (
+	"fmt"
+
 	"github.com/grafana/sobek"
+	"go.k6.io/k6/v2/js/common"
 
 	"github.com/Dmitry-Fedotov-Dev/xk6-sip/engine"
 )
@@ -87,3 +90,61 @@ func (c *jsCall) HowCompleted() sobek.Value {
 
 // Trace returns the SIP ladder of this call, for logging failures.
 func (c *jsCall) Trace() string { return engine.FormatLadder(c.call.Trace()) }
+
+// Hold puts the other side on hold (re-INVITE a=sendonly).
+func (c *jsCall) Hold() bool { return c.expect("hold", c.call.Hold()) }
+
+// Unhold resumes a held call.
+func (c *jsCall) Unhold() bool { return c.expect("unhold", c.call.Unhold()) }
+
+// IsOnHold: we put the call on hold. IsRemoteHold: the other side did.
+func (c *jsCall) IsOnHold() bool     { return c.call.OnHold() }
+func (c *jsCall) IsRemoteHold() bool { return c.call.RemoteHold() }
+
+// Transfer is a blind transfer (REFER) of the other party:
+//
+//	call.transfer(ua3)          // ua3's ext
+//	call.transfer(ua3, 'onk')   // another identity of ua3
+//	call.transfer('703')        // a number or SIP URI
+func (c *jsCall) Transfer(dest sobek.Value, aon sobek.Value) bool {
+	rt := c.dev.mi.vu.Runtime()
+	obj := rt.NewObject()
+	_ = obj.Set("callee", dest)
+	if isSet(aon) {
+		_ = obj.Set("aon", aon)
+	}
+	target, err := dialTarget(rt, obj)
+	if err != nil {
+		common.Throw(rt, fmt.Errorf("transfer: %w", err))
+	}
+	return c.expect("transfer", c.call.Transfer(target))
+}
+
+// AttendedTransfer connects the other party of this call with the other
+// party of consult, our call with the transfer target (REFER + Replaces).
+func (c *jsCall) AttendedTransfer(consult sobek.Value) bool {
+	rt := c.dev.mi.vu.Runtime()
+	other, ok := consult.Export().(*jsCall)
+	if !ok {
+		common.Throw(rt, fmt.Errorf("attendedTransfer: expected the consultation call"))
+	}
+	return c.expect("transfer", c.call.AttendedTransfer(other.call))
+}
+
+// ExpectTransferred waits for the outcome of our transfer (final NOTIFY).
+func (c *jsCall) ExpectTransferred(timeout sobek.Value) bool {
+	rt := c.dev.mi.vu.Runtime()
+	return c.expect("transferred", c.call.ExpectTransferred(durationArg(rt, timeout, c.dev.mi.root.opts.expectTimeout)))
+}
+
+// ExpectReferredCall returns the call we placed because the other side
+// transferred us with REFER (endpoint-driven transfers), or false.
+func (c *jsCall) ExpectReferredCall(timeout sobek.Value) sobek.Value {
+	rt := c.dev.mi.vu.Runtime()
+	nc := c.call.ReferredCall(durationArg(rt, timeout, c.dev.mi.root.opts.expectTimeout))
+	if nc == nil {
+		c.dev.obs.expectFailed("referred call")
+		return rt.ToValue(false)
+	}
+	return rt.ToValue(newJSCall(c.dev, nc))
+}

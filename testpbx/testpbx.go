@@ -5,9 +5,6 @@
 package testpbx
 
 import (
-	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 	"net"
 	"strconv"
@@ -44,6 +41,7 @@ type PBX struct {
 	cfg      Config
 	log      *slog.Logger
 	addr     string
+	laddr    sip.Addr
 	pc       net.PacketConn
 	ua       *sipgo.UserAgent
 	client   *sipgo.Client
@@ -53,15 +51,11 @@ type PBX struct {
 	users map[string]*User // by name
 	exts  map[string]*User // by extension
 
-	mu    sync.Mutex
-	regs  map[string]sip.Uri // user name -> contact
-	legs  map[string]*bridge // Call-ID of either leg -> bridge
-	nonce atomic.Int64
-}
-
-type bridge struct {
-	a *sipgo.DialogServerSession // caller side
-	b *sipgo.DialogClientSession // callee side
+	mu      sync.Mutex
+	regs    map[string]sip.Uri // user name -> contact
+	legs    map[string]*bridge // Call-ID of either leg -> bridge
+	orphans map[string]leg     // transferor legs left after a transfer
+	nonce   atomic.Int64
 }
 
 func Start(cfg Config) (*PBX, error) {
@@ -110,6 +104,7 @@ func Start(cfg Config) (*PBX, error) {
 		cfg:    cfg,
 		log:    cfg.Logger,
 		addr:   addr,
+		laddr:  sip.Addr{IP: la.IP, Port: la.Port},
 		pc:     pc,
 		ua:     ua,
 		client: cl,
@@ -117,10 +112,11 @@ func Start(cfg Config) (*PBX, error) {
 			Client:     cl,
 			ContactHDR: sip.ContactHeader{Address: sip.Uri{Scheme: "sip", User: "pbx", Host: host, Port: la.Port}},
 		},
-		users: make(map[string]*User),
-		exts:  make(map[string]*User),
-		regs:  make(map[string]sip.Uri),
-		legs:  make(map[string]*bridge),
+		users:   make(map[string]*User),
+		exts:    make(map[string]*User),
+		regs:    make(map[string]sip.Uri),
+		legs:    make(map[string]*bridge),
+		orphans: make(map[string]leg),
 	}
 	for i := range cfg.Users {
 		u := &cfg.Users[i]
@@ -134,6 +130,13 @@ func Start(cfg Config) (*PBX, error) {
 	srv.OnInvite(p.onInvite)
 	srv.OnAck(p.onAck)
 	srv.OnBye(p.onBye)
+	srv.OnRefer(p.onRefer)
+	srv.OnNotify(func(req *sip.Request, tx sip.ServerTransaction) {
+		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 200, "OK", nil)))
+	})
+	srv.OnUpdate(func(req *sip.Request, tx sip.ServerTransaction) {
+		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 200, "OK", nil)))
+	})
 	srv.OnOptions(func(req *sip.Request, tx sip.ServerTransaction) {
 		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 200, "OK", nil)))
 	})
@@ -238,161 +241,6 @@ func qopList(q string) []string {
 	}
 	return []string{q}
 }
-
-func (p *PBX) onInvite(req *sip.Request, tx sip.ServerTransaction) {
-	if to := req.To(); to != nil && to.Params.Has("tag") {
-		// In-dialog re-INVITE: not bridged in this minimal PBX.
-		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 488, "Not Acceptable Here", nil)))
-		return
-	}
-	p.Stats.Invites.Add(1)
-
-	caller := p.users[req.From().Address.User]
-	if caller == nil {
-		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 403, "Forbidden", nil)))
-		return
-	}
-	if p.cfg.AuthInvite && !p.authorized(req, tx, caller, "Proxy-Authorization", 407) {
-		return
-	}
-	callee := p.exts[req.Recipient.User]
-	if callee == nil {
-		callee = p.users[req.Recipient.User]
-	}
-	if callee == nil {
-		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 404, "Not Found", nil)))
-		return
-	}
-	p.mu.Lock()
-	target, ok := p.regs[callee.Name]
-	p.mu.Unlock()
-	if !ok {
-		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 480, "Temporarily Unavailable", nil)))
-		return
-	}
-
-	a, err := p.dialogUA.ReadInvite(req, tx)
-	if err != nil {
-		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 400, "Bad Request", nil)))
-		return
-	}
-	defer a.Close()
-	p.logErr("respond", a.Respond(100, "Trying", nil))
-
-	// B leg: new Call-ID, caller ID = caller's extension.
-	breq := sip.NewRequest(sip.INVITE, target)
-	from := &sip.FromHeader{Address: sip.Uri{Scheme: "sip", User: callerID(caller), Host: p.cfg.Domain}}
-	from.Params.Add("tag", sip.GenerateTagN(16))
-	breq.AppendHeader(from)
-	breq.AppendHeader(&sip.ToHeader{Address: sip.Uri{Scheme: "sip", User: callee.Ext, Host: p.cfg.Domain}})
-	breq.AppendHeader(sip.NewHeader("Content-Type", "application/sdp"))
-	breq.SetBody(req.Body())
-
-	// Cancel the B leg when A cancels.
-	ctx, cancel := context.WithCancel(a.Context())
-	defer cancel()
-	b, err := p.dialogUA.WriteInvite(ctx, breq)
-	if err != nil {
-		p.logErr("respond", a.Respond(503, "Service Unavailable", nil))
-		return
-	}
-	br := &bridge{a: a, b: b}
-	aID, bID := req.CallID().Value(), breq.CallID().Value()
-	p.mu.Lock()
-	p.legs[aID], p.legs[bID] = br, br
-	p.mu.Unlock()
-	cleanup := func() {
-		p.mu.Lock()
-		delete(p.legs, aID)
-		delete(p.legs, bID)
-		p.mu.Unlock()
-	}
-
-	err = b.WaitAnswer(ctx, sipgo.AnswerOptions{
-		OnResponse: func(res *sip.Response) error {
-			if res.StatusCode == 180 || res.StatusCode == 183 {
-				p.logErr("respond", a.Respond(res.StatusCode, res.Reason, nil))
-			}
-			return nil
-		},
-	})
-	if err != nil {
-		cleanup()
-		var re *sipgo.ErrDialogResponse
-		switch {
-		case errors.As(err, &re):
-			p.logErr("respond", a.Respond(re.Res.StatusCode, re.Res.Reason, nil))
-		case a.Context().Err() != nil:
-			// A cancelled; the transaction layer already sent 487.
-		default:
-			p.logErr("respond", a.Respond(408, "Request Timeout", nil))
-		}
-		return
-	}
-	if err := b.Ack(context.Background()); err != nil {
-		cleanup()
-		p.logErr("respond", a.Respond(500, "Server Internal Error", nil))
-		return
-	}
-	p.Stats.Answered.Add(1)
-	if err := a.WriteResponse(sip.NewSDPResponseFromRequest(a.InviteRequest, b.InviteResponse.Body())); err != nil {
-		p.log.Warn("answer A leg", "error", err)
-		cleanup()
-		p.logErr("dialog", b.Bye(context.Background()))
-	}
-}
-
-func callerID(u *User) string {
-	if u.Ext != "" {
-		return u.Ext
-	}
-	return u.Name
-}
-
-func (p *PBX) bridgeFor(req *sip.Request) (*bridge, bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	id := req.CallID().Value()
-	br := p.legs[id]
-	if br == nil {
-		return nil, false
-	}
-	return br, br.a.InviteRequest.CallID().Value() == id
-}
-
-func (p *PBX) onAck(req *sip.Request, tx sip.ServerTransaction) {
-	if br, fromA := p.bridgeFor(req); br != nil && fromA {
-		p.logErr("dialog", br.a.ReadAck(req, tx))
-	}
-}
-
-func (p *PBX) onBye(req *sip.Request, tx sip.ServerTransaction) {
-	br, fromA := p.bridgeFor(req)
-	if br == nil {
-		p.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 481, "Call/Transaction Does Not Exist", nil)))
-		return
-	}
-	p.mu.Lock()
-	delete(p.legs, br.a.InviteRequest.CallID().Value())
-	delete(p.legs, br.b.InviteRequest.CallID().Value())
-	p.mu.Unlock()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if fromA {
-		p.logErr("dialog", br.a.ReadBye(req, tx))
-		if err := br.b.Bye(ctx); err != nil {
-			p.log.Warn("BYE to B", "error", err)
-		}
-	} else {
-		p.logErr("dialog", br.b.ReadBye(req, tx))
-		if err := br.a.Bye(ctx); err != nil {
-			p.log.Warn("BYE to A", "error", err)
-		}
-	}
-}
-
-func (p *PBX) String() string { return fmt.Sprintf("testpbx(%s)", p.addr) }
 
 func (p *PBX) logErr(what string, err error) {
 	if err != nil {

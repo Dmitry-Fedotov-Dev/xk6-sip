@@ -33,6 +33,11 @@ type DeviceConfig struct {
 	// Identities are the numbers this subscriber is known by, e.g.
 	// {"ext": "701", "onk": "+79101110011"}. Scripts refer to them by key.
 	Identities map[string]string
+	// SessionExpires requests RFC 4028 session timers on calls we make
+	// (and offers them on calls we answer); 0 leaves it to the peer.
+	SessionExpires time.Duration
+	// PRACK makes us send 180 reliably (RFC 3262) when the caller supports it.
+	PRACK bool
 	// Media overrides the engine's media defaults for this device.
 	Media *MediaOptions
 	// Observer overrides the engine's observer for this device's events,
@@ -61,6 +66,7 @@ type Device struct {
 
 	ip       string
 	port     int
+	laddr    sip.Addr
 	pc       net.PacketConn
 	ua       *sipgo.UserAgent
 	client   *sipgo.Client
@@ -235,6 +241,7 @@ func (d *Device) open() error {
 
 	d.ctx, d.cancel = context.WithCancel(context.Background())
 	d.ip, d.port, d.pc = ip, port, pc
+	d.laddr = sip.Addr{IP: net.ParseIP(ip), Port: port}
 	d.ua, d.client, d.server = ua, cl, srv
 	d.contact = sip.ContactHeader{Address: sip.Uri{Scheme: "sip", User: d.aor.User, Host: ip, Port: port}}
 	d.dialogUA = sipgo.DialogUA{Client: cl, ContactHDR: d.contact}
@@ -249,9 +256,11 @@ func (d *Device) open() error {
 		d.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 200, "OK", nil)))
 	}
 	srv.OnOptions(ok)
-	srv.OnNotify(ok)
 	srv.OnInfo(ok)
-	srv.OnUpdate(ok)
+	srv.OnNotify(d.onNotify)
+	srv.OnUpdate(d.onUpdate)
+	srv.OnPrack(d.onPrack)
+	srv.OnRefer(d.onRefer)
 	go srv.ServeUDP(pc)
 	if err := waitListening(ua, hostPort); err != nil {
 		d.close()
@@ -521,6 +530,14 @@ func (d *Device) onInvite(req *sip.Request, tx sip.ServerTransaction) {
 	c.remote = callerNumber(req)
 	c.tStart = time.Now()
 	c.trace.msg(false, req)
+	old, hasReplaces := d.replacedCall(req)
+	if hasReplaces && old == nil {
+		d.logErr("respond", sess.Respond(481, "Call/Transaction Does Not Exist", nil))
+		c.finish(EndedByLocal, 481, "Replaces: no such dialog")
+		return
+	}
+	c.replaces = old
+	c.answerHdr = c.sessionForAnswer(req)
 	if mo := d.mediaOptions(nil); !mo.Disabled {
 		if err := c.setupIncomingMedia(req.Body(), mo); err != nil {
 			d.logErr("respond", sess.Respond(488, "Not Acceptable Here", nil))
@@ -531,11 +548,20 @@ func (d *Device) onInvite(req *sip.Request, tx sip.ServerTransaction) {
 	}
 	d.addCall(c)
 
-	if err := sess.Respond(180, "Ringing", nil); err != nil {
+	if old != nil {
+		// Transfer target: the new call takes over an existing one
+		// (attended transfer). Answer at once and hang up the old call.
+		c.trace.note(false, "replaces %s", old.callID)
+		c.Accept()
+		go func() {
+			if c.ExpectConnected(inDialogTimeout) {
+				old.byeWith(EndedByRemote, "replaced")
+			}
+		}()
+	} else if err := c.ring(sess, req); err != nil {
 		c.finish(EndedByError, 0, err.Error())
 		return
 	}
-	c.trace.note(true, "SIP/2.0 180 Ringing")
 	c.markRinging(time.Now())
 	d.deliver(c)
 
@@ -573,10 +599,19 @@ func (d *Device) onReInvite(req *sip.Request, tx sip.ServerTransaction) {
 		return
 	}
 	c.trace.msg(false, req)
+	// Our own re-INVITE is in progress: glare (RFC 3261 14.2).
+	if !c.reinviteMu.TryLock() {
+		d.logErr("respond", tx.Respond(sip.NewResponseFromRequest(req, 491, "Request Pending", nil)))
+		c.trace.note(true, "SIP/2.0 491 Request Pending")
+		return
+	}
+	defer c.reinviteMu.Unlock()
 	res := sip.NewSDPResponseFromRequest(req, c.reofferAnswer(req.Body()))
 	res.AppendHeader(sip.HeaderClone(&d.contact))
+	c.addSessionHeaders(req, res)
 	d.logErr("respond", tx.Respond(res))
 	c.trace.msg(true, res)
+	c.sessionRefreshed()
 }
 
 // deliver puts an incoming call into the inbox and wakes ExpectCall waiters.
@@ -678,11 +713,16 @@ func (d *Device) Call(opts CallOptions) (*Call, error) {
 	req.AppendHeader(from)
 	req.AppendHeader(&sip.ToHeader{Address: target})
 	req.AppendHeader(sip.HeaderClone(&d.contact))
+	req.AppendHeader(sip.NewHeader("Supported", "100rel, timer"))
+	if se := d.cfg.SessionExpires; se > 0 {
+		req.AppendHeader(sip.NewHeader("Session-Expires", strconv.Itoa(int(se/time.Second))))
+		req.AppendHeader(sip.NewHeader("Min-SE", "90"))
+	}
 	for k, v := range opts.Headers {
 		req.AppendHeader(sip.NewHeader(k, v))
 	}
 	req.AppendHeader(sip.NewHeader("Content-Type", "application/sdp"))
-	req.SetDestination(d.proxyAddr)
+	req.SetDestination(d.destinationFor(target))
 
 	c := newCall(d, Outgoing)
 	if mo := d.mediaOptions(opts.Media); mo.Disabled {
@@ -781,4 +821,27 @@ func (d *Device) logErr(what string, err error) {
 	if err != nil {
 		d.eng.log.Debug("sip: "+what+" failed", "device", d.cfg.ID, "error", err)
 	}
+}
+
+// destinationFor picks where an out-of-dialog request goes: the configured
+// proxy, else the registrar for targets in our domain, else the target's
+// own host (e.g. a Refer-To pointing at another server).
+func (d *Device) destinationFor(target sip.Uri) string {
+	if d.cfg.Proxy != "" || target.Host == d.aor.Host || target.Host == d.registrarURI.Host {
+		return d.proxyAddr
+	}
+	port := target.Port
+	if port == 0 {
+		port = 5060
+	}
+	return net.JoinHostPort(target.Host, strconv.Itoa(port))
+}
+
+// ContactURI is where this device receives requests, e.g. for calling it
+// directly without a proxy. Empty before Start.
+func (d *Device) ContactURI() string {
+	if d.ip == "" {
+		return ""
+	}
+	return d.contact.Address.String()
 }

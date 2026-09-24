@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,6 +28,7 @@ type uacDialog struct {
 	remoteTarget sip.Uri
 	routes       []string // route set, from Record-Route in reverse order
 	cseq         uint32
+	lastRSeq     uint64 // highest RSeq we PRACKed
 }
 
 const maxAuthAttempts = 2
@@ -60,6 +63,7 @@ func (u *uacDialog) run(c *Call, cancel <-chan struct{}, noAnswer time.Duration)
 	sent := c.tStart
 	var provisional, cancelSent bool
 	authAttempts := 0
+	retried422 := false
 	timer := time.NewTimer(noAnswer)
 	defer timer.Stop()
 	var cancelWait <-chan time.Time
@@ -92,6 +96,7 @@ func (u *uacDialog) run(c *Call, cancel <-chan struct{}, noAnswer time.Duration)
 			switch {
 			case res.IsProvisional():
 				provisional = true
+				u.maybePRACK(c, res)
 				if res.StatusCode > 100 {
 					c.markRinging(now)
 				}
@@ -112,6 +117,16 @@ func (u *uacDialog) run(c *Call, cancel <-chan struct{}, noAnswer time.Duration)
 				sent = time.Now()
 				provisional = false
 				c.trace.note(true, "INVITE (with credentials)")
+				continue
+			case res.StatusCode == 422 && !retried422 && !cancelSent:
+				d.report("INVITE", res, nil, now.Sub(sent))
+				retried422 = true
+				if err := u.retryWithMinSE(res); err != nil {
+					return inviteResult{res: res, err: err}
+				}
+				sent = time.Now()
+				provisional = false
+				c.trace.note(true, "INVITE (Session-Expires raised to Min-SE)")
 				continue
 			default:
 				if !(cancelSent && res.StatusCode == 487) {
@@ -244,6 +259,13 @@ func (u *uacDialog) inDialog(method sip.RequestMethod) *sip.Request {
 	return req
 }
 
+// inDialogAck builds the ACK for the 2xx of an in-dialog INVITE with CSeq seq.
+func (u *uacDialog) inDialogAck(seq uint32) *sip.Request {
+	ack := u.inDialog(sip.ACK)
+	ack.CSeq().SeqNo = seq
+	return ack
+}
+
 // ack sends ACK for the 2xx and re-sends it on 2xx retransmissions.
 func (u *uacDialog) ack() error {
 	ack := u.inDialog(sip.ACK)
@@ -282,4 +304,33 @@ func (u *uacDialog) do(ctx context.Context, req *sip.Request) (*sip.Response, er
 			return nil, ctx.Err()
 		}
 	}
+}
+
+// retryWithMinSE re-sends the INVITE after 422 Session Interval Too Small
+// with the interval the peer demands (RFC 4028 section 6).
+func (u *uacDialog) retryWithMinSE(res *sip.Response) error {
+	h := res.GetHeader("Min-SE")
+	if h == nil {
+		return errors.New("422 without Min-SE")
+	}
+	minSE, _, _ := strings.Cut(strings.TrimSpace(h.Value()), ";")
+	if _, err := strconv.Atoi(minSE); err != nil {
+		return fmt.Errorf("bad Min-SE %q", h.Value())
+	}
+	req := u.invite.Clone()
+	req.RemoveHeader("Via")
+	req.RemoveHeader("Session-Expires")
+	req.RemoveHeader("Min-SE")
+	req.CSeq().SeqNo++
+	req.AppendHeader(sip.NewHeader("Session-Expires", minSE))
+	req.AppendHeader(sip.NewHeader("Min-SE", minSE))
+	tx, err := u.d.client.TransactionRequest(u.d.ctx, req, sipgo.ClientRequestAddVia)
+	if err != nil {
+		return err
+	}
+	u.invite, u.tx = req, tx
+	u.mu.Lock()
+	u.cseq = req.CSeq().SeqNo
+	u.mu.Unlock()
+	return nil
 }

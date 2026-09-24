@@ -71,21 +71,35 @@ type Call struct {
 	decision   chan decision
 
 	media     *media.Stream
-	answerSDP []byte // our SDP for the 200 OK of an incoming call
-	ackSDP    bool   // INVITE had no offer: the answer comes in the ACK
+	answerSDP []byte       // our SDP for the 200 OK of an incoming call
+	ackSDP    bool         // INVITE had no offer: the answer comes in the ACK
+	answerHdr []sip.Header // extra headers for that 200 OK (session timer)
 
-	mu        sync.Mutex
-	state     State
-	status    int
-	reason    string
-	endedBy   EndedBy
-	tStart    time.Time // INVITE sent or received
-	tRing     time.Time
-	tAnswer   time.Time
-	tEnd      time.Time
-	ringing   chan struct{}
-	connected chan struct{}
-	done      chan struct{}
+	reinviteMu        sync.Mutex // one re-INVITE at a time
+	sess              *sessionTimer
+	startSessionLater func()
+	prack             chan struct{} // closed when PRACK for our reliable 180 arrives
+	prackOnce         sync.Once
+	xfer              *transferProgress // REFER we sent
+	referred          chan *Call        // call we placed because of a REFER we received
+	replaces          *Call             // call this one replaces (INVITE with Replaces)
+
+	mu         sync.Mutex
+	state      State
+	localHold  bool
+	remoteHold bool
+	byeBy      EndedBy
+	byeReason  string
+	status     int
+	reason     string
+	endedBy    EndedBy
+	tStart     time.Time // INVITE sent or received
+	tRing      time.Time
+	tAnswer    time.Time
+	tEnd       time.Time
+	ringing    chan struct{}
+	connected  chan struct{}
+	done       chan struct{}
 }
 
 func newCall(d *Device, dir Direction) *Call {
@@ -95,6 +109,8 @@ func newCall(d *Device, dir Direction) *Call {
 		trace:     tracer{full: d.eng.opts.TraceBodies},
 		decision:  make(chan decision, 1),
 		cancelReq: make(chan struct{}),
+		referred:  make(chan *Call, 1),
+		prack:     make(chan struct{}),
 		ringing:   make(chan struct{}),
 		connected: make(chan struct{}),
 		done:      make(chan struct{}),
@@ -192,6 +208,7 @@ func (c *Call) finish(by EndedBy, status int, reason string) {
 	dur := c.tEnd.Sub(c.tAnswer)
 	c.mu.Unlock()
 
+	c.stopSession()
 	c.dev.removeCall(c)
 	c.closeMedia(wasConnected)
 	if wasConnected {
@@ -211,6 +228,9 @@ func (c *Call) answer(sess *sipgo.DialogServerSession) {
 		body = c.dev.placeholderSDP()
 	}
 	res := sip.NewSDPResponseFromRequest(sess.InviteRequest, body)
+	for _, h := range c.answerHdr {
+		res.AppendHeader(h)
+	}
 	c.trace.msg(true, res)
 	if err := sess.WriteResponse(res); err != nil {
 		c.finish(EndedByError, 0, "answer: "+err.Error())
@@ -218,6 +238,9 @@ func (c *Call) answer(sess *sipgo.DialogServerSession) {
 	}
 	c.markConnected(now)
 	c.startMedia()
+	if c.startSessionLater != nil {
+		c.startSessionLater()
+	}
 }
 
 // Accept answers a ringing incoming call. The 200 OK/ACK exchange happens in
@@ -301,7 +324,13 @@ func (c *Call) bye() bool {
 		c.trace.note(false, "BYE failed: %v", err)
 	}
 	// Even if BYE failed the call is over for us.
-	c.finish(EndedByLocal, 0, "BYE")
+	c.mu.Lock()
+	by, reason := c.byeBy, c.byeReason
+	c.mu.Unlock()
+	if by == "" {
+		by, reason = EndedByLocal, "BYE"
+	}
+	c.finish(by, 0, reason)
 	return err == nil && res.IsSuccess()
 }
 
@@ -382,6 +411,7 @@ func (c *Call) runOutgoing(noAnswer time.Duration) {
 		c.markConnected(now)
 		if !r.cancelled {
 			c.startMedia()
+			c.sessionFromAnswer(r.res)
 		}
 		if r.cancelled {
 			// Answered while we were cancelling: the answer won the race,

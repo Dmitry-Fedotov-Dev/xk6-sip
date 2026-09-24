@@ -17,6 +17,7 @@ var deviceKeys = map[string]bool{
 	"authUser": true, "pass": true, "password": true, "expires": true,
 	"register": true, "displayName": true,
 	"media": true, "codecs": true, "audio": true, "heardLevel": true,
+	"sessionExpires": true, "prack": true,
 }
 
 // jsDevice is the script-facing Device:
@@ -36,16 +37,18 @@ func (mi *ModuleInstance) newDevice(call sobek.ConstructorCall) *sobek.Object {
 	obj := objectArg(rt, call.Argument(0), "Device")
 
 	cfg := engine.DeviceConfig{
-		ID:          stringField(rt, obj, "device", ""),
-		Registrar:   stringField(rt, obj, "registrar", ""),
-		Proxy:       stringField(rt, obj, "proxy", ""),
-		User:        stringField(rt, obj, "user", ""),
-		AuthUser:    stringField(rt, obj, "authUser", ""),
-		Password:    stringField(rt, obj, "pass", stringField(rt, obj, "password", "")),
-		Expires:     durationField(rt, obj, "expires", 0),
-		NoRegister:  !boolField(rt, obj, "register", true),
-		DisplayName: stringField(rt, obj, "displayName", ""),
-		Identities:  map[string]string{},
+		ID:             stringField(rt, obj, "device", ""),
+		Registrar:      stringField(rt, obj, "registrar", ""),
+		Proxy:          stringField(rt, obj, "proxy", ""),
+		User:           stringField(rt, obj, "user", ""),
+		AuthUser:       stringField(rt, obj, "authUser", ""),
+		Password:       stringField(rt, obj, "pass", stringField(rt, obj, "password", "")),
+		Expires:        durationField(rt, obj, "expires", 0),
+		NoRegister:     !boolField(rt, obj, "register", true),
+		DisplayName:    stringField(rt, obj, "displayName", ""),
+		SessionExpires: durationField(rt, obj, "sessionExpires", 0),
+		PRACK:          boolField(rt, obj, "prack", false),
+		Identities:     map[string]string{},
 	}
 	for _, k := range obj.Keys() {
 		if deviceKeys[k] {

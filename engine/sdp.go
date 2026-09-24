@@ -5,10 +5,12 @@ import (
 	"time"
 )
 
-// sdpAudio builds the audio SDP used for both offer and answer.
+// sdpAudio builds the placeholder SDP of calls without media.
 // TODO(media): real RTP socket and codec negotiation; the port is a
 // placeholder until the media layer exists, so nothing listens on it.
-func sdpAudio(ip string, port int) []byte {
+func sdpAudio(ip string, port int) []byte { return sdpAudioDir(ip, port, "sendrecv") }
+
+func sdpAudioDir[D ~string](ip string, port int, dir D) []byte {
 	id := time.Now().UnixNano() / 1000
 	return fmt.Appendf(nil, "v=0\r\n"+
 		"o=- %d %d IN IP4 %s\r\n"+
