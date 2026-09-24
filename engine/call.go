@@ -205,7 +205,6 @@ func (c *Call) answer(sess *sipgo.DialogServerSession) {
 		c.finish(EndedByError, 0, "answer: "+err.Error())
 		return
 	}
-	c.trace.note(false, "ACK")
 	c.markConnected(now)
 }
 
