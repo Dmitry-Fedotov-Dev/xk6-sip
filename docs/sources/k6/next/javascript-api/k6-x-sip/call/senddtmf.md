@@ -21,8 +21,6 @@ Sends DTMF digits as RTP events (RFC 4733), the way phones send key presses to v
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -32,5 +30,3 @@ out.expectConnected('10s');
 out.sendDTMF('1');
 check(B.expectCall({ caller: A, timeout: '15s' }), { 'IVR routed to B': (c) => c !== false });
 ```
-
-{{< /code >}}

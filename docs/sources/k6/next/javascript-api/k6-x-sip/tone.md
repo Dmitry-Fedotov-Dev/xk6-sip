@@ -17,11 +17,9 @@ Creates a sine tone audio source. The default audio of every call is `sip.tone(1
 
 | Type | Description |
 | --- | --- |
-| object | Audio source to pass as `audio` to [options()](../options/), a [Device](../device/) or [call()](../device/call/). |
+| object | Audio source to pass as `audio` to [options()](options.md), a [Device](device/_index.md) or [call()](device/call.md). |
 
 ### Example
-
-{{< code >}}
 
 <!-- md-k6:skip -->
 
@@ -29,5 +27,3 @@ Creates a sine tone audio source. The default audio of every call is `sip.tone(1
 // A quiet tone: check that the PBX passes low-level audio
 const out = A.call({ callee: B, audio: sip.tone(440, -40), heardLevel: -50 });
 ```
-
-{{< /code >}}

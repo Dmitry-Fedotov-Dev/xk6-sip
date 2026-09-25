@@ -39,7 +39,7 @@ A connected call where the other side put this side on hold and resumed:
 +0.003s  <- SIP/2.0 200 OK (BYE)
 ```
 
-By default the trace keeps only the first line of each message, so it costs almost nothing even under load. To see full messages with headers and SDP, set `trace: true` in [options()](../../options/).
+By default the trace keeps only the first line of each message, so it costs almost nothing even under load. To see full messages with headers and SDP, set `trace: true` in [options()](../options.md).
 
 On Windows, the clock has a resolution of about 0.5 ms, so short intervals may show as `0.000s`. Use Linux for precise timings.
 
@@ -50,8 +50,6 @@ On Windows, the clock has a resolution of about 0.5 ms, so short intervals may s
 | string | The ladder, one message per line. Empty if nothing was sent yet. |
 
 ### Example
-
-{{< code >}}
 
 <!-- md-k6:skip -->
 
@@ -71,5 +69,3 @@ export default function () {
   }
 }
 ```
-
-{{< /code >}}

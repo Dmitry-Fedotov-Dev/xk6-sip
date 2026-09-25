@@ -16,8 +16,6 @@ Returns the final status code of the INVITE: `200` for an answered call, the err
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -25,5 +23,3 @@ const out = A.call({ callee: '1999' });
 out.expectDisconnected('5s');
 check(out.status(), { 'unknown number gives 404': (s) => s === 404 });
 ```
-
-{{< /code >}}

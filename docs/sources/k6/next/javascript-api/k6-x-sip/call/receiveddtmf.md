@@ -16,12 +16,8 @@ Returns all DTMF digits received on this leg so far, without waiting.
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
 console.log(`B received: ${inc.receivedDTMF()}`);
 ```
-
-{{< /code >}}

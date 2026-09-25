@@ -16,13 +16,9 @@ Reports whether the other side, or the PBX on its behalf, put this leg on hold: 
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
 inc.hold();
 check(out.isRemoteHold(), { 'A is on hold': (held) => held });
 ```
-
-{{< /code >}}

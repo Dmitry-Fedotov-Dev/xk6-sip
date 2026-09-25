@@ -20,8 +20,6 @@ Waits until the call rings. For an outgoing leg that means a provisional respons
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -29,5 +27,3 @@ const out = A.call({ callee: B });
 B.expectCall({ caller: A });
 check(out.expectRinging('3s'), { 'A hears ringback within 3 s': (ok) => ok });
 ```
-
-{{< /code >}}

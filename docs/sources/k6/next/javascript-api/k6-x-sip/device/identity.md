@@ -20,13 +20,9 @@ Returns one of the numbers given to the device constructor, by field name.
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
 // Call forwarding: *21*<number># sends B's calls to C
 B.call({ aon: '*21*' + C.identity('ext') + '#' });
 ```
-
-{{< /code >}}

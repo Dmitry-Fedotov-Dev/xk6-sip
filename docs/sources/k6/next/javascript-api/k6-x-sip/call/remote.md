@@ -16,13 +16,9 @@ Returns the other party as a number. For an outgoing leg, it is the dialled numb
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
 const inc = B.expectCall({ timeout: '10s' });
 if (inc) console.log(`incoming call from ${inc.remote()}`);
 ```
-
-{{< /code >}}

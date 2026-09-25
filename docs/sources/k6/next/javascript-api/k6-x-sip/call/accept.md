@@ -6,7 +6,7 @@ weight: 01
 
 # Call.accept()
 
-Answers a ringing incoming call with `200 OK` and starts media. It returns at once; use [`expectConnected()`](../expectconnected/) on either leg to wait until the caller has acknowledged the answer.
+Answers a ringing incoming call with `200 OK` and starts media. It returns at once; use [`expectConnected()`](expectconnected.md) on either leg to wait until the caller has acknowledged the answer.
 
 ### Returns
 
@@ -15,8 +15,6 @@ Answers a ringing incoming call with `200 OK` and starts media. It returns at on
 | boolean | `true` if the answer was sent. `false` for an outgoing call, or a call that is already answered, rejected or ended. |
 
 ### Example
-
-{{< code >}}
 
 <!-- md-k6:skip -->
 
@@ -27,5 +25,3 @@ if (inc) {
   check(inc.expectConnected('5s'), { 'B connected': (ok) => ok });
 }
 ```
-
-{{< /code >}}

@@ -21,13 +21,9 @@ Waits until the DTMF digits received on this leg contain `digits`. Use it to che
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
 out.sendDTMF('123#');
 check(inc.expectDTMF('123#', '5s'), { 'B got 123#': (ok) => ok });
 ```
-
-{{< /code >}}

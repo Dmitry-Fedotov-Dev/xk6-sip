@@ -16,8 +16,6 @@ Resumes a call that this side put on hold: sends re-INVITE with `a=sendrecv` and
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -26,5 +24,3 @@ sleep(2);
 check(inc.unhold(), { 'call resumed': (ok) => ok });
 check(out.isHeard('3s'), { 'A hears B again': (ok) => ok });
 ```
-
-{{< /code >}}

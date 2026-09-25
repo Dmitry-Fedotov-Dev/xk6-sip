@@ -14,18 +14,16 @@ Sets options that apply to all devices of the k6 process. Call it in the init co
 | options.registerRate | number | `0` (unlimited) | Maximum REGISTER requests per second across all devices. Use it to avoid a registration storm when thousands of VUs start at once. |
 | options.ringTimeout | duration | `'3m'` | How long an incoming call may ring before it is claimed with `expectCall()` and answered. After that the device rejects it with `480 Temporarily Unavailable`. |
 | options.expectTimeout | duration | `'30s'` | Default timeout of `expectCall()`, every `expect*()` method and `isHeard()`, used when the call doesn't pass its own. |
-| options.trace | boolean | `false` | Keep full SIP messages, with headers and SDP, in [`call.trace()`](../call/trace/). By default only the first line of each message is kept. |
+| options.trace | boolean | `false` | Keep full SIP messages, with headers and SDP, in [`call.trace()`](call/trace.md). By default only the first line of each message is kept. |
 | options.deviceTag | boolean | `false` | Add a `device` tag with the device name to every SIP and RTP metric. Useful for debugging; it multiplies the number of time series by the number of devices. |
 | options.media | boolean | `true` | `false` disables RTP for all calls, for signalling-only load. |
 | options.codecs | string or array | `'PCMU,PCMA'` | Offered codecs in order of preference, for example `'PCMA,PCMU'` or `['PCMA']`. The aliases `ulaw`, `alaw`, `G711U` and `G711A` are accepted. |
-| options.audio | [audio](../audio/), `'tone'` or `'silence'` | `'tone'` | What calls send: a WAV file, a 1 kHz tone at −20 dBFS, or silence. |
-| options.heardLevel | number | `-45` | Level in dBFS above which received audio counts as heard by [`isHeard()`](../call/isheard/). |
+| options.audio | [audio](audio.md), `'tone'` or `'silence'` | `'tone'` | What calls send: a WAV file, a 1 kHz tone at −20 dBFS, or silence. |
+| options.heardLevel | number | `-45` | Level in dBFS above which received audio counts as heard by [`isHeard()`](call/isheard.md). |
 
-The media options `media`, `codecs`, `audio` and `heardLevel` are defaults. A [Device](../device/) can override them for its calls, and a single [`call()`](../device/call/) can override them again.
+The media options `media`, `codecs`, `audio` and `heardLevel` are defaults. A [Device](device/_index.md) can override them for its calls, and a single [`call()`](device/call.md) can override them again.
 
 ### Example
-
-{{< code >}}
 
 <!-- md-k6:skip -->
 
@@ -39,5 +37,3 @@ sip.options({
   trace: __ENV.SIP_TRACE === '1',
 });
 ```
-
-{{< /code >}}

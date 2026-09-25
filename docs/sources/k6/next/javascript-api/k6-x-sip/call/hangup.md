@@ -25,8 +25,6 @@ If the other side answers at the same moment as CANCEL is sent, the call is ende
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -36,5 +34,3 @@ out.hangup();
 check(B_leg.expectDisconnected('5s'), { 'B got BYE': (ok) => ok });
 check(out.howCompleted(), { 'A hung up': (c) => c.endedBy === 'local' });
 ```
-
-{{< /code >}}

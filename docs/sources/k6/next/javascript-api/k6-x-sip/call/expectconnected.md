@@ -20,8 +20,6 @@ Waits until the call is answered. For an outgoing leg, the time from INVITE to `
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -32,5 +30,3 @@ if (!check(out.expectConnected('5s'), { 'A connected': (ok) => ok })) {
   console.warn(out.trace());
 }
 ```
-
-{{< /code >}}

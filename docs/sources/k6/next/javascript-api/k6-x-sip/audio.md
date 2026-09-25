@@ -16,11 +16,9 @@ Loads a WAV file that calls play in a loop instead of the default tone. The file
 
 | Type | Description |
 | --- | --- |
-| object | Audio source to pass as `audio` to [options()](../options/), a [Device](../device/) or [call()](../device/call/). |
+| object | Audio source to pass as `audio` to [options()](options.md), a [Device](device/_index.md) or [call()](device/call.md). |
 
 ### Example
-
-{{< code >}}
 
 <!-- md-k6:skip -->
 
@@ -34,8 +32,6 @@ const A = new sip.Device({
   audio: greeting,
 });
 ```
-
-{{< /code >}}
 
 To convert any audio file with ffmpeg:
 

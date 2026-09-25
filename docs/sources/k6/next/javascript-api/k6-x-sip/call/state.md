@@ -23,8 +23,6 @@ Returns the current state of the call without waiting.
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -32,5 +30,3 @@ if (out.state() === 'connected') {
   out.hangup();
 }
 ```
-
-{{< /code >}}

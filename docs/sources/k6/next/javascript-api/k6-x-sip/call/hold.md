@@ -8,7 +8,7 @@ weight: 18
 
 Puts the other side on hold: sends re-INVITE with `a=sendonly` in the SDP and waits for the response. Either side of a call can hold it. If both sides send re-INVITE at the same moment, the call retries after `491 Request Pending`, as RFC 3261 requires.
 
-The other leg sees the hold with [`isRemoteHold()`](../isremotehold/).
+The other leg sees the hold with [`isRemoteHold()`](isremotehold.md).
 
 ### Returns
 
@@ -18,8 +18,6 @@ The other leg sees the hold with [`isRemoteHold()`](../isremotehold/).
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -27,5 +25,3 @@ check(inc.hold(), { 'B put A on hold': (ok) => ok });
 check(out.isRemoteHold(), { 'A sees the hold': (held) => held });
 check(inc.unhold(), { 'call resumed': (ok) => ok });
 ```
-
-{{< /code >}}

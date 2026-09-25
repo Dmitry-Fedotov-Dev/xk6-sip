@@ -16,8 +16,6 @@ Returns the codec agreed in the SDP offer and answer.
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -25,5 +23,3 @@ const A = new sip.Device({ ...subs[0], codecs: 'PCMA' });
 // ...
 check(out.codec(), { 'PBX accepted PCMA': (c) => c === 'PCMA' });
 ```
-
-{{< /code >}}

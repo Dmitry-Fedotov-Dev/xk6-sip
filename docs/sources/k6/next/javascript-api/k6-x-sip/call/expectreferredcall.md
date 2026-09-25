@@ -18,11 +18,9 @@ With a PBX that handles transfers itself, no new call is made on this side and t
 
 | Type | Description |
 | --- | --- |
-| [Call](../) or `false` | The new outgoing call, or `false` on timeout. |
+| [Call](_index.md) or `false` | The new outgoing call, or `false` on timeout. |
 
 ### Example
-
-{{< code >}}
 
 <!-- md-k6:skip -->
 
@@ -35,5 +33,3 @@ if (aNew) {
   check(aNew.expectConnected('10s'), { 'A connected to C': (ok) => ok });
 }
 ```
-
-{{< /code >}}

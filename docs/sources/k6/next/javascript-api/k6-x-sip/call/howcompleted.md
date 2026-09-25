@@ -6,7 +6,7 @@ weight: 10
 
 # Call.howCompleted()
 
-Describes how the call ended. Call it after the call has ended, for example after [`expectDisconnected()`](../expectdisconnected/).
+Describes how the call ended. Call it after the call has ended, for example after [`expectDisconnected()`](expectdisconnected.md).
 
 | Field | Type | Description |
 | --- | --- | --- |
@@ -23,8 +23,6 @@ Describes how the call ended. Call it after the call has ended, for example afte
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -35,5 +33,3 @@ check(how, {
   'talked at least 5 s': (c) => c.duration >= 5000,
 });
 ```
-
-{{< /code >}}

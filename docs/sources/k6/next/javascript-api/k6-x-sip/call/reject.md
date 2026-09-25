@@ -21,8 +21,6 @@ Declines a ringing incoming call with a final error response. Use it to test bus
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -32,5 +30,3 @@ const busy = B.expectCall({ caller: A });
 if (busy) busy.reject(486, 'Busy Here');
 check(C.expectCall({ caller: A, timeout: '10s' }), { 'forwarded on busy': (c) => c !== false });
 ```
-
-{{< /code >}}

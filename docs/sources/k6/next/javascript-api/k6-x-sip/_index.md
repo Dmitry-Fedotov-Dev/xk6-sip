@@ -16,8 +16,8 @@ xk6 build v2.3.0 --with github.com/Dmitry-Fedotov-Dev/xk6-sip@latest
 
 ## Key concepts
 
-- **Device** is one SIP subscriber: a UDP socket, a registration that is refreshed automatically, and the calls it makes and receives. Refer to [Device](device/).
-- **Call** is one call leg as seen by one device. The caller gets its leg from [`device.call()`](device/call/), the callee gets its own leg from [`device.expectCall()`](device/expectcall/). Refer to [Call](call/).
+- **Device** is one SIP subscriber: a UDP socket, a registration that is refreshed automatically, and the calls it makes and receives. Refer to [Device](device/_index.md).
+- **Call** is one call leg as seen by one device. The caller gets its leg from [`device.call()`](device/call.md), the callee gets its own leg from [`device.expectCall()`](device/expectcall.md). Refer to [Call](call/_index.md).
 - **Numbers (identities).** A subscriber usually has several numbers: an extension, an external number, a gateway number. They are plain fields of the Device, for example `ext: '701', onk: '+79101110011'`. Scripts refer to them by name with the `aon` option, so a test says "call B on its external number" instead of hard-coding digits.
 - **Actions never wait, only expectations wait.** `call()`, `accept()`, `hangup()`, `hold()`, `transfer()` and `sendDTMF()` return at once; the SIP exchange continues in the background. Methods whose name starts with `expect`, and `isHeard()`, wait for something to happen and return `false` on timeout instead of throwing. Because of this rule, one VU can play both ends of a call: `call()` returns before the callee answers, so the script can go on to `expectCall()` and `accept()` on the other device.
 - **Media.** Every call sends real RTP (G.711), a 1 kHz tone unless told otherwise. The receiver checks the signal level, so `isHeard()` means "audio arrived", not "packets arrived". Set `media: false` for signalling-only load.
@@ -26,16 +26,14 @@ xk6 build v2.3.0 --with github.com/Dmitry-Fedotov-Dev/xk6-sip@latest
 
 | Export | Description |
 | --- | --- |
-| [Device](device/) | Class: a SIP subscriber that registers, calls and receives calls. |
-| [options( options )](options/) | Sets module-wide options: local IP, REGISTER rate, timeouts, tracing, media defaults. |
-| [audio( data )](audio/) | Loads a WAV file as an audio source for calls. |
-| [tone( [freq], [dbfs] )](tone/) | Creates a sine tone audio source. |
-| [shutdown()](shutdown/) | Hangs up all calls, unregisters and closes all devices. Call it in `teardown()`. |
-| [Metrics](metrics/) | Built-in `sip_*` and `rtp_*` metrics. |
+| [Device](device/_index.md) | Class: a SIP subscriber that registers, calls and receives calls. |
+| [options( options )](options.md) | Sets module-wide options: local IP, REGISTER rate, timeouts, tracing, media defaults. |
+| [audio( data )](audio.md) | Loads a WAV file as an audio source for calls. |
+| [tone( [freq], [dbfs] )](tone.md) | Creates a sine tone audio source. |
+| [shutdown()](shutdown.md) | Hangs up all calls, unregisters and closes all devices. Call it in `teardown()`. |
+| [Metrics](metrics.md) | Built-in `sip_*` and `rtp_*` metrics. |
 
 ## Example
-
-{{< code >}}
 
 <!-- md-k6:skip -->
 
@@ -77,14 +75,12 @@ export function teardown() {
 }
 ```
 
-{{< /code >}}
-
 ## Lifecycle
 
 1. Devices are created in the init context. Creating a device does no network I/O.
 2. The first `call()`, `expectCall()` or `register()` inside a test function opens the device socket and sends REGISTER. `call()` with a callee device also registers the callee, so it can receive the call.
 3. The registration is refreshed in the background until the end of the test.
-4. [`sip.shutdown()`](shutdown/) in `teardown()` hangs up remaining calls and unregisters every device.
+4. [`sip.shutdown()`](shutdown.md) in `teardown()` hangs up remaining calls and unregisters every device.
 
 A device can't be used in the init context: calling its methods there throws an error.
 
@@ -94,8 +90,6 @@ The same `default` function runs as a functional test or as a load test; only `o
 
 - **Functional test:** `vus: 1, iterations: 1` and the threshold `checks: ['rate==1']`. Any failed check makes k6 exit with a non-zero code. A `handleSummary()` with `jUnit()` from [k6-summary](https://jslib.k6.io/k6-summary/0.1.0/index.js) writes a JUnit report for CI and test management tools.
 - **Load test:** an arrival-rate executor gives a constant number of new calls per second (CAPS). By Little's law, concurrent calls = CAPS × call duration: 20 calls per second of 60 seconds each keep 1200 calls up, so the scenario needs about 1200 VUs and 2400 subscribers.
-
-{{< code >}}
 
 <!-- md-k6:skip -->
 
@@ -112,8 +106,6 @@ export const options = {
 };
 ```
 
-{{< /code >}}
-
 ## Subscribers from a CSV file
 
 Device options are plain strings, so a CSV row can be passed to the constructor as is. Every column that is not a known option becomes a number of the subscriber.
@@ -123,8 +115,6 @@ device,registrar,user,pass,expires,ext,onk
 phone1,sip:pbx:5060,701@pbx,secret,300,701,+79101110011
 phone2,sip:pbx:5060,702@pbx,secret,300,702,+79101110012
 ```
-
-{{< code >}}
 
 <!-- md-k6:skip -->
 
@@ -141,8 +131,6 @@ const pair = Math.max(__VU - 1, 0) * 2;
 const A = new sip.Device(subs[pair]);
 const B = new sip.Device(subs[pair + 1]);
 ```
-
-{{< /code >}}
 
 ## Durations
 

@@ -8,11 +8,9 @@ weight: 06
 
 Hangs up the active calls of the device, unregisters it and closes its socket. The next `call()`, `expectCall()` or `register()` starts the device again with a new socket and a new registration.
 
-Use it to test re-registration or to free a subscriber in the middle of a test. To clean up at the end of a test, use [`sip.shutdown()`](../../shutdown/) instead.
+Use it to test re-registration or to free a subscriber in the middle of a test. To clean up at the end of a test, use [`sip.shutdown()`](../shutdown.md) instead.
 
 ### Example
-
-{{< code >}}
 
 <!-- md-k6:skip -->
 
@@ -24,5 +22,3 @@ export default function () {
   check(A.register(), { 'A registered again': (ok) => ok });
 }
 ```
-
-{{< /code >}}

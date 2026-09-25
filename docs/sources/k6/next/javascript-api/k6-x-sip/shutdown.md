@@ -12,8 +12,6 @@ Without `shutdown()` the devices stay registered on the PBX until their registra
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -23,5 +21,3 @@ export function teardown() {
   sip.shutdown();
 }
 ```
-
-{{< /code >}}

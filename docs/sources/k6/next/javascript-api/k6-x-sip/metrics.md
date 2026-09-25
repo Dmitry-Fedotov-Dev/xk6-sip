@@ -53,8 +53,6 @@ With `sip.options({ deviceTag: true })`, every metric also gets a `device` tag w
 
 ## Example thresholds
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -70,5 +68,3 @@ export const options = {
   },
 };
 ```
-
-{{< /code >}}

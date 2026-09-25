@@ -16,8 +16,6 @@ Reports whether the last REGISTER of the device succeeded. It doesn't send anyth
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -25,5 +23,3 @@ if (!A.isRegistered()) {
   console.warn(`${A.id} lost its registration`);
 }
 ```
-
-{{< /code >}}

@@ -29,8 +29,6 @@ When a connected call ends, the same values go to the `rtp_*` metrics.
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -40,5 +38,3 @@ const before = out.mediaStats().received;
 sleep(1);
 check(out.mediaStats(), { 'A hears music on hold': (s) => s.received > before });
 ```
-
-{{< /code >}}

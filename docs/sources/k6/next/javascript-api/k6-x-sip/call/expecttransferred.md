@@ -6,7 +6,7 @@ weight: 24
 
 # Call.expectTransferred( [timeout] )
 
-Waits for the result of a [`transfer()`](../transfer/) or [`attendedTransfer()`](../attendedtransfer/) made from this leg. The result comes in the final NOTIFY from the other side (RFC 3515): a `2xx` status means the transferred party is connected to the target.
+Waits for the result of a [`transfer()`](transfer.md) or [`attendedTransfer()`](attendedtransfer.md) made from this leg. The result comes in the final NOTIFY from the other side (RFC 3515): a `2xx` status means the transferred party is connected to the target.
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -20,8 +20,6 @@ Waits for the result of a [`transfer()`](../transfer/) or [`attendedTransfer()`]
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -30,5 +28,3 @@ const toC = C.expectCall({ caller: A });
 if (toC) toC.accept();
 check(inc.expectTransferred('10s'), { 'transfer succeeded': (ok) => ok });
 ```
-
-{{< /code >}}

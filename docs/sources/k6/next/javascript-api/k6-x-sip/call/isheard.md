@@ -22,8 +22,6 @@ Under load, the `rtp_audio_heard` metric reports the share of call legs that hea
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -31,5 +29,3 @@ inc.accept();
 check(inc.isHeard('3s'), { 'B hears A': (ok) => ok });
 check(out.isHeard('3s'), { 'A hears B': (ok) => ok });
 ```
-
-{{< /code >}}

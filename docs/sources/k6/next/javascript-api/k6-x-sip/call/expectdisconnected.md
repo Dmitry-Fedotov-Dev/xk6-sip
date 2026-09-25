@@ -6,7 +6,7 @@ weight: 06
 
 # Call.expectDisconnected( [timeout] )
 
-Waits until the call ends for any reason: the other side hung up, the PBX dropped it, the call was cancelled or rejected. Use [`howCompleted()`](../howcompleted/) afterwards to check how it ended.
+Waits until the call ends for any reason: the other side hung up, the PBX dropped it, the call was cancelled or rejected. Use [`howCompleted()`](howcompleted.md) afterwards to check how it ended.
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -20,8 +20,6 @@ Waits until the call ends for any reason: the other side hung up, the PBX droppe
 
 ### Example
 
-{{< code >}}
-
 <!-- md-k6:skip -->
 
 ```javascript
@@ -31,5 +29,3 @@ B.expectCall({ caller: A });
 check(out.expectDisconnected('25s'), { 'call ended': (ok) => ok });
 check(out.howCompleted(), { 'cancelled on no answer': (c) => c.endedBy === 'timeout' && c.status === 487 });
 ```
-
-{{< /code >}}
