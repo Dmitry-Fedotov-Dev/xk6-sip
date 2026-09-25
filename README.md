@@ -52,15 +52,64 @@ export default function () {
 export function teardown() { sip.shutdown(); } // unregister everything
 ```
 
-Device: `call`, `expectCall`, `register`, `isRegistered`, `identity(key)`, `destroy`, `id`.
-Call: `accept`, `reject(code?, reason?)`, `hangup`, `expectRinging`,
-`expectConnected`, `expectDisconnected` (optional timeout), `state`,
-`status`, `remote`, `howCompleted`, `trace` (SIP ladder), `callId`,
-`codec`, `isHeard`, `sendDTMF`, `expectDTMF`, `receivedDTMF`, `mediaStats`.
-Call control: `hold`, `unhold`, `isOnHold`, `isRemoteHold`, `transfer(dest, aon?)`,
-`attendedTransfer(consultCall)`, `expectTransferred`, `expectReferredCall`.
+Only `expect*` methods and `isHeard` wait, so one VU can drive both ends of a
+call. They return `false` on timeout instead of throwing.
 
-Only `expect*` methods wait, so one VU can drive both ends of a call.
+Full reference with every option and an example per method:
+[docs/](docs/sources/k6/next/javascript-api/k6-x-sip/_index.md) (k6-docs format).
+
+| Module | Description |
+| --- | --- |
+| `new sip.Device(options)` | SIP subscriber; `device`, `registrar`, `proxy`, `user`, `authUser`, `pass`, `expires`, `register`, `displayName`, `sessionExpires`, `prack`, media options; any other field is a number (`ext`, `onk`...) |
+| `sip.options(options)` | `localIP`, `registerRate`, `ringTimeout` (3m), `expectTimeout` (30s), `trace`, `deviceTag`, media defaults |
+| `sip.audio(data)`, `sip.tone(freq?, dbfs?)` | audio sources for calls |
+| `sip.shutdown()` | hang up, unregister and close all devices; call in `teardown()` |
+
+| Device | Description |
+| --- | --- |
+| `call({callee, aon, timeout, id, headers, ...media})` | send INVITE, return the Call at once (or `false`) |
+| `expectCall({caller, aon, timeout})` | wait for a matching incoming call (or `false`) |
+| `register()`, `isRegistered()` | REGISTER now / last result |
+| `identity(key)`, `id` | a number of the device / its name |
+| `destroy()` | hang up, unregister, close; next use starts it again |
+
+| Call | Description |
+| --- | --- |
+| `accept()`, `reject(code?, reason?)`, `hangup()` | answer, decline (603), end in any state |
+| `expectRinging/Connected/Disconnected(timeout?)` | wait for the state |
+| `state()`, `status()`, `remote()`, `callId`, `id` | calling/ringing/connected/ended, final status, other party |
+| `howCompleted()` | `{endedBy, status, reason, duration}` once ended |
+| `trace()` | SIP ladder of this leg |
+| `codec()`, `isHeard(timeout?)`, `mediaStats()` | media checks and RTP statistics |
+| `sendDTMF(digits, ms?)`, `expectDTMF(digits, timeout?)`, `receivedDTMF()` | RFC 4733 DTMF |
+| `hold()`, `unhold()`, `isOnHold()`, `isRemoteHold()` | re-INVITE hold |
+| `transfer(dest, aon?)`, `attendedTransfer(consult)` | REFER, REFER with Replaces |
+| `expectTransferred(timeout?)`, `expectReferredCall(timeout?)` | transfer result / call placed on REFER |
+
+### Debugging a call
+
+`call.trace()` returns the SIP ladder of one call leg: every message the
+device sent (`->`) or received (`<-`) for this call, with the time since the
+first one. Print it when a check fails:
+
+```js
+const out = ua1.call({ callee: '1999' });
+if (!check(out, { 'connected': (c) => c.expectConnected('5s') })) {
+  console.warn(out.trace());
+}
+```
+
+```
++0.000s  -> INVITE sip:1999@test.local SIP/2.0
++0.001s  <- SIP/2.0 407 Proxy Authentication Required
++0.002s  -> INVITE (with credentials)
++0.003s  <- SIP/2.0 404 Not Found
+```
+
+Only start lines are kept, so tracing is cheap under load.
+`sip.options({ trace: true })` keeps whole messages with headers and SDP.
+`howCompleted()` tells who ended the call and why, and `callId` finds the
+call in PBX logs.
 
 ### Media
 
