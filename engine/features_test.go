@@ -47,6 +47,25 @@ func withConfig(t *testing.T, cfg engine.DeviceConfig) *engine.Device {
 	return d
 }
 
+func TestCloseAfterRestart(t *testing.T) {
+	eng := engine.New(engine.Options{LocalIP: "127.0.0.1"})
+	d, err := eng.NewDevice(engine.DeviceConfig{ID: "a", Registrar: "sip:192.0.2.1", User: "a@test.local", NoRegister: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Start(); err != nil {
+		t.Fatal(err)
+	}
+	d.Destroy()
+	if err := d.Start(); err != nil {
+		t.Fatal(err)
+	}
+	eng.Close()
+	if d.Started() {
+		t.Fatal("restarted device survived engine Close")
+	}
+}
+
 // connect makes a call from a to b and answers it.
 func connect(t *testing.T, a, b *engine.Device) (*engine.Call, *engine.Call) {
 	t.Helper()

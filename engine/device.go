@@ -299,11 +299,12 @@ func (d *Device) close() {
 	d.ua, d.pc = nil, nil
 }
 
-// Destroy hangs up active calls, unregisters and closes the socket.
+// Destroy hangs up active calls, unregisters and closes the socket. The
+// device stays known to the engine: Start reopens it and Engine.Close
+// still cleans it up.
 func (d *Device) Destroy() {
 	d.startMu.Lock()
 	defer d.startMu.Unlock()
-	defer d.eng.forget(d)
 	if !d.started {
 		return
 	}

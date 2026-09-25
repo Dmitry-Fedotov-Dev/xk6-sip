@@ -112,8 +112,8 @@ func (d *jsDevice) Register() bool {
 
 func (d *jsDevice) IsRegistered() bool { return d.dev.Registered() }
 
-// Destroy unregisters and closes the device. It is done automatically when
-// the VU finishes.
+// Destroy unregisters and closes the device; the next use starts it again.
+// sip.shutdown() does it for all devices at the end of the test.
 func (d *jsDevice) Destroy() { d.dev.Destroy() }
 
 // Identity returns a configured number, e.g. ua.identity('ext').

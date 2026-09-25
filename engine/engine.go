@@ -93,9 +93,3 @@ func (e *Engine) Close() {
 	}
 	wg.Wait()
 }
-
-func (e *Engine) forget(d *Device) {
-	e.mu.Lock()
-	delete(e.devices, d)
-	e.mu.Unlock()
-}
