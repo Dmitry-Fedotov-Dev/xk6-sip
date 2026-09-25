@@ -27,34 +27,50 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: go run ./docs/export <k6-docs>/docs/sources/k6/next/javascript-api")
 		os.Exit(2)
 	}
-	src := filepath.Join("docs", "sources", "k6", "next", "javascript-api", module)
 	dst := filepath.Join(os.Args[1], module)
-	n := 0
-	err := filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
-			return err
-		}
-		rel, err := filepath.Rel(src, p)
-		if err != nil {
-			return err
-		}
-		data, err := os.ReadFile(p) // #nosec G304 -- walking our own docs tree
-		if err != nil {
-			return err
-		}
-		out := filepath.Join(dst, rel)
-		if err := os.MkdirAll(filepath.Dir(out), 0o750); err != nil {
-			return err
-		}
-		n++
-		// #nosec G306 -- documentation meant to be committed and read by others
-		return os.WriteFile(out, []byte(convert(filepath.ToSlash(rel), string(data))), 0o644)
-	})
+	n, err := export(filepath.Join("docs", "sources", "k6", "next", "javascript-api", module), dst)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	fmt.Printf("exported %d pages to %s\n", n, dst)
+}
+
+// export converts every page under src into dst. Both trees are accessed
+// through os.Root, so no path can escape them.
+func export(src, dst string) (int, error) {
+	// #nosec G703 -- dst is the k6-docs checkout named by the user running the tool
+	if err := os.MkdirAll(dst, 0o750); err != nil {
+		return 0, err
+	}
+	in, err := os.OpenRoot(src)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = in.Close() }()
+	out, err := os.OpenRoot(dst)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = out.Close() }()
+
+	n := 0
+	err = fs.WalkDir(in.FS(), ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
+			return err
+		}
+		data, err := in.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		if err := out.MkdirAll(path.Dir(p), 0o750); err != nil {
+			return err
+		}
+		n++
+		// #nosec G306 -- documentation meant to be committed and read by others
+		return out.WriteFile(p, []byte(convert(p, string(data))), 0o644)
+	})
+	return n, err
 }
 
 // convert turns one page from GitHub Markdown into k6-docs Hugo Markdown.
