@@ -18,7 +18,7 @@ docker compose -f monitoring/docker-compose.yml up -d
 
 # 2. Run a test that sends metrics to Prometheus
 K6_PROMETHEUS_RW_SERVER_URL=http://localhost:9091/api/v1/write \
-K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM=true \
+K6_FEATURES=native-histograms \
 ./k6 run -o experimental-prometheus-rw \
   --tag testid=run-1 --tag pbx_version=4.2.1 examples/call.js
 
@@ -72,7 +72,7 @@ windows_exporter.exe --collectors.enabled=cpu,memory,net,os,system --web.listen-
 
 When k6 sends metrics to Prometheus, trend percentiles and Rate metrics are cumulative since the start of the test: ten bad minutes after an hour of good calls barely move them. The dashboard therefore uses:
 
-- **native histograms** for timings (`K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM=true`), so Prometheus computes p50, p95 and p99 per window;
+- **native histograms** for timings (`K6_FEATURES=native-histograms`), so Prometheus computes p50, p95 and p99 per window;
 - **counters** for shares: `sip_calls`, `sip_call_results` and `rtp_legs`. Refer to [Metrics](metrics.md).
 
 ## Dashboard

@@ -1952,7 +1952,8 @@
             "stacking": {
               "mode": "none",
               "group": "A"
-            }
+            },
+            "axisSoftMax": 0.01
           },
           "color": {
             "mode": "palette-classic"

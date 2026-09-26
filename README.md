@@ -208,7 +208,7 @@ memory and SIP/RTP traffic.
 docker compose -f monitoring/docker-compose.yml up -d
 
 K6_PROMETHEUS_RW_SERVER_URL=http://localhost:9091/api/v1/write \
-K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM=true \
+K6_FEATURES=native-histograms \
 bin/k6 run -o experimental-prometheus-rw \
   --tag testid=run-1 --tag pbx_version=4.2.1 \
   -e SIP_METRICS_ADDR=127.0.0.1:6566 examples/call.js
