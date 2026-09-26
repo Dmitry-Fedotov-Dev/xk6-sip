@@ -11,6 +11,8 @@ type Observer interface {
 	CallEnd(CallEndEvent)
 	IncomingCall(IncomingCallEvent)
 	Media(MediaEvent)
+	FirstResponse(FirstResponseEvent)
+	Retransmission(RetransmissionEvent)
 }
 
 // RequestEvent is one client transaction that got a final response or failed.
@@ -61,11 +63,32 @@ type IncomingCallEvent struct {
 	HasDelivery bool
 }
 
+// FirstResponseEvent is emitted for every INVITE transaction when its first
+// response arrives, usually 100 Trying. Until then the transaction layer
+// retransmits the INVITE (every T1 = 500 ms, doubling), so this time above
+// T1 means the system under test is too slow to acknowledge requests.
+type FirstResponseEvent struct {
+	Device string
+	Method string
+	Delay  time.Duration
+}
+
+// RetransmissionEvent is emitted when a SIP message is sent again by the
+// transaction layer because the peer did not answer or acknowledge it.
+// Status is 0 for requests.
+type RetransmissionEvent struct {
+	Device string
+	Method string // request method, or the CSeq method of a response
+	Status int
+}
+
 // NopObserver discards all events.
 type NopObserver struct{}
 
-func (NopObserver) Request(RequestEvent)           {}
-func (NopObserver) CallSetup(CallSetupEvent)       {}
-func (NopObserver) CallEnd(CallEndEvent)           {}
-func (NopObserver) IncomingCall(IncomingCallEvent) {}
-func (NopObserver) Media(MediaEvent)               {}
+func (NopObserver) Request(RequestEvent)               {}
+func (NopObserver) CallSetup(CallSetupEvent)           {}
+func (NopObserver) CallEnd(CallEndEvent)               {}
+func (NopObserver) IncomingCall(IncomingCallEvent)     {}
+func (NopObserver) Media(MediaEvent)                   {}
+func (NopObserver) FirstResponse(FirstResponseEvent)   {}
+func (NopObserver) Retransmission(RetransmissionEvent) {}

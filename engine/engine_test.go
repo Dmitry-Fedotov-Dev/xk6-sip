@@ -16,6 +16,19 @@ type recorder struct {
 	ends     []engine.CallEndEvent
 	incoming []engine.IncomingCallEvent
 	media    []engine.MediaEvent
+	first    []engine.FirstResponseEvent
+	retrans  []engine.RetransmissionEvent
+}
+
+func (r *recorder) FirstResponse(e engine.FirstResponseEvent) {
+	r.mu.Lock()
+	r.first = append(r.first, e)
+	r.mu.Unlock()
+}
+func (r *recorder) Retransmission(e engine.RetransmissionEvent) {
+	r.mu.Lock()
+	r.retrans = append(r.retrans, e)
+	r.mu.Unlock()
 }
 
 func (r *recorder) Request(e engine.RequestEvent) {
@@ -263,5 +276,40 @@ func TestCallWithoutMedia(t *testing.T) {
 	defer rec.mu.Unlock()
 	if len(rec.media) != 1 || rec.media[0].Direction != engine.Incoming {
 		t.Errorf("media events %+v", rec.media)
+	}
+}
+
+// Every INVITE transaction reports its first response: the 407 challenge
+// of the first INVITE and the 100 Trying of the authenticated one.
+func TestFirstResponseTime(t *testing.T) {
+	_, _, rec, a, b := setup(t)
+	if err := b.Start(); err != nil {
+		t.Fatal(err)
+	}
+	out, err := a.Call(engine.CallOptions{Target: "702"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	in, _ := b.ExpectCall(engine.CallMatch{}, wait)
+	if in == nil {
+		t.Fatal("no call")
+	}
+	in.Accept()
+	if !out.ExpectConnected(wait) {
+		t.Fatal("not connected")
+	}
+	out.Hangup()
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.first) != 2 {
+		t.Fatalf("want 2 first-response events (407, then 100), got %+v", rec.first)
+	}
+	for _, e := range rec.first {
+		if e.Method != "INVITE" || e.Delay < 0 || e.Delay > wait { // 0 is possible: Windows clock steps are ~0.5 ms
+			t.Fatalf("bad event %+v", e)
+		}
+	}
+	if len(rec.retrans) != 0 {
+		t.Fatalf("retransmissions on a healthy local PBX: %+v", rec.retrans)
 	}
 }

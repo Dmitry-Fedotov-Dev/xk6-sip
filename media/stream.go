@@ -405,6 +405,8 @@ func (s *Stream) tick() {
 	}
 	if _, err := s.conn.WriteToUDP(b[:n], s.remote); err == nil {
 		s.sent++
+		rtpNet.pout.Add(1)
+		rtpNet.bout.Add(uint64(n)) // #nosec G115 -- n is a small positive packet size
 	}
 }
 
@@ -448,6 +450,8 @@ func (s *Stream) readLoop() {
 		if err != nil {
 			return // closed
 		}
+		rtpNet.pin.Add(1)
+		rtpNet.bin.Add(uint64(n)) // #nosec G115 -- n is a small positive packet size
 		s.receive(buf[:n], src)
 	}
 }

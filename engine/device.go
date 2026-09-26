@@ -261,7 +261,7 @@ func (d *Device) open() error {
 	srv.OnUpdate(d.onUpdate)
 	srv.OnPrack(d.onPrack)
 	srv.OnRefer(d.onRefer)
-	go srv.ServeUDP(pc)
+	go srv.ServeUDP(newCountingConn(pc, d))
 	if err := waitListening(ua, hostPort); err != nil {
 		d.close()
 		return err

@@ -1,6 +1,7 @@
 package engine_test
 
 import (
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -45,6 +46,82 @@ func withConfig(t *testing.T, cfg engine.DeviceConfig) *engine.Device {
 		t.Fatal(err)
 	}
 	return d
+}
+
+// A peer that ignores the INVITE makes sipgo retransmit it (timer A,
+// 500 ms, doubling); every copy after the first must be reported. The peer
+// answers 503 to the third copy so the call ends without waiting for
+// timer B.
+func TestRetransmissionsReported(t *testing.T) {
+	peer, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer peer.Close() //nolint:errcheck
+	go func() {
+		buf := make([]byte, 4096)
+		copies := 0
+		for {
+			n, from, err := peer.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			msg := string(buf[:n])
+			if !strings.HasPrefix(msg, "INVITE ") {
+				continue
+			}
+			if copies++; copies < 3 {
+				continue
+			}
+			const crlf = "\r\n"
+			res := "SIP/2.0 503 Service Unavailable" + crlf
+			for _, l := range strings.Split(msg, crlf) {
+				name, _, _ := strings.Cut(l, ":")
+				switch strings.ToLower(name) {
+				case "via", "from", "call-id", "cseq":
+					res += l + crlf
+				case "to":
+					res += l + ";tag=peer" + crlf
+				}
+			}
+			_, _ = peer.WriteTo([]byte(res+"Content-Length: 0"+crlf+crlf), from)
+		}
+	}()
+	rec := &recorder{}
+	eng := engine.New(engine.Options{Observer: rec, LocalIP: "127.0.0.1"})
+	t.Cleanup(eng.Close)
+	d, err := eng.NewDevice(engine.DeviceConfig{ID: "a", Registrar: "sip:" + peer.LocalAddr().String(), User: "a@test.local", NoRegister: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := engine.SIPNetStats()
+	out, err := d.Call(engine.CallOptions{Target: "702"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !out.ExpectDisconnected(wait) || out.Status() != 503 {
+		t.Fatalf("want the call to end with 503, got %d:\n%s", out.Status(), engine.FormatLadder(out.Trace()))
+	}
+
+	rec.mu.Lock()
+	n := 0
+	for _, e := range rec.retrans {
+		if e.Method == "INVITE" && e.Status == 0 {
+			n++
+		}
+	}
+	first := rec.first
+	rec.mu.Unlock()
+	if n != 2 {
+		t.Fatalf("want 2 INVITE retransmissions, got %d", n)
+	}
+	if len(first) != 1 || first[0].Delay < time.Second {
+		t.Fatalf("first response should come after the retransmissions: %+v", first)
+	}
+	after := engine.SIPNetStats()
+	if after.PacketsOut-before.PacketsOut < 4 || after.PacketsIn-before.PacketsIn < 1 || after.BytesOut <= before.BytesOut {
+		t.Fatalf("SIP traffic not counted: %+v -> %+v", before, after)
+	}
 }
 
 func TestCloseAfterRestart(t *testing.T) {

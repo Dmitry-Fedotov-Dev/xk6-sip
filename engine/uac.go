@@ -61,7 +61,7 @@ func (u *uacDialog) send(ctx context.Context) error {
 func (u *uacDialog) run(c *Call, cancel <-chan struct{}, noAnswer time.Duration) inviteResult {
 	d := u.d
 	sent := c.tStart
-	var provisional, cancelSent bool
+	var provisional, cancelSent, answered bool
 	authAttempts := 0
 	retried422 := false
 	timer := time.NewTimer(noAnswer)
@@ -91,6 +91,10 @@ func (u *uacDialog) run(c *Call, cancel <-chan struct{}, noAnswer time.Duration)
 		select {
 		case res := <-u.tx.Responses():
 			now := time.Now()
+			if !answered {
+				answered = true
+				d.observer().FirstResponse(FirstResponseEvent{Device: d.cfg.ID, Method: "INVITE", Delay: now.Sub(sent)})
+			}
 			c.trace.msg(false, res)
 			c.remoteSDP(res)
 			switch {
@@ -115,7 +119,7 @@ func (u *uacDialog) run(c *Call, cancel <-chan struct{}, noAnswer time.Duration)
 					return inviteResult{res: res, err: err}
 				}
 				sent = time.Now()
-				provisional = false
+				provisional, answered = false, false
 				c.trace.note(true, "INVITE (with credentials)")
 				continue
 			case res.StatusCode == 422 && !retried422 && !cancelSent:
@@ -125,7 +129,7 @@ func (u *uacDialog) run(c *Call, cancel <-chan struct{}, noAnswer time.Duration)
 					return inviteResult{res: res, err: err}
 				}
 				sent = time.Now()
-				provisional = false
+				provisional, answered = false, false
 				c.trace.note(true, "INVITE (Session-Expires raised to Min-SE)")
 				continue
 			default:

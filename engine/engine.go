@@ -93,3 +93,32 @@ func (e *Engine) Close() {
 	}
 	wg.Wait()
 }
+
+// Counts reports the devices with an open socket and the answered outgoing
+// calls in progress, across the engine.
+func (e *Engine) Counts() (devices, calls int) {
+	e.mu.Lock()
+	devs := make([]*Device, 0, len(e.devices))
+	for d := range e.devices {
+		devs = append(devs, d)
+	}
+	e.mu.Unlock()
+	for _, d := range devs {
+		if !d.Started() {
+			continue
+		}
+		devices++
+		d.callsMu.Lock()
+		cs := make([]*Call, 0, len(d.calls))
+		for _, c := range d.calls {
+			cs = append(cs, c)
+		}
+		d.callsMu.Unlock()
+		for _, c := range cs {
+			if c.dir == Outgoing && c.State() == StateConnected {
+				calls++
+			}
+		}
+	}
+	return devices, calls
+}
