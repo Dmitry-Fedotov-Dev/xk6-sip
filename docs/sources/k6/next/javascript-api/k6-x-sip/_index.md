@@ -32,6 +32,7 @@ xk6 build v2.3.0 --with github.com/Dmitry-Fedotov-Dev/xk6-sip@latest
 | [tone( [freq], [dbfs] )](tone.md) | Creates a sine tone audio source. |
 | [shutdown()](shutdown.md) | Hangs up all calls, unregisters and closes all devices. Call it in `teardown()`. |
 | [Metrics](metrics.md) | Built-in `sip_*` and `rtp_*` metrics. |
+| [Monitoring](monitoring.md) | Prometheus and Grafana stack with a ready dashboard for runs. |
 
 ## Example
 

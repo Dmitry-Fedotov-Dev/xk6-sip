@@ -212,7 +212,8 @@ bin/k6 run -o experimental-prometheus-rw \
 Open http://localhost:3001 (no login; the stack is for local use and binds to
 127.0.0.1). Native histograms give percentiles per time window, so a
 degradation in the middle of a long run is visible. `testid` and
-`pbx_version` tags let you pick a run and compare PBX versions.
+`pbx_version` tags let you pick a run and compare PBX versions. Panels, how to
+read them and limitations: [docs/.../monitoring.md](docs/sources/k6/next/javascript-api/k6-x-sip/monitoring.md).
 
 ![xk6-sip dashboard](monitoring/img/dashboard.png)
 

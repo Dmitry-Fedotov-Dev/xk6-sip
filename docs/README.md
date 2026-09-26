@@ -7,6 +7,7 @@ parameters, return values and an example:
 - [Device](sources/k6/next/javascript-api/k6-x-sip/device/_index.md) – subscriber options and methods
 - [Call](sources/k6/next/javascript-api/k6-x-sip/call/_index.md) – call control, media, hold, transfers, `trace()`
 - [Metrics](sources/k6/next/javascript-api/k6-x-sip/metrics.md)
+- [Monitoring](sources/k6/next/javascript-api/k6-x-sip/monitoring.md) – Prometheus and Grafana stack, dashboard, how to read it
 
 ## Export to k6-docs
 

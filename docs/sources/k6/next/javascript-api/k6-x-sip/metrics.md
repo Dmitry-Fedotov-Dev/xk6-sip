@@ -47,7 +47,7 @@ Rate metrics and trend percentiles are cumulative over the whole run in most out
 | `sip_call_results` | Counter | `result`, `status` | Outgoing calls by outcome: `success`, `failure` or `cancelled` (this side hung up before an answer, by `hangup()` or the no-answer timeout), with the final INVITE status. |
 | `rtp_legs` | Counter | `codec`, `direction`, `heard` | Call legs by whether they heard audio (`heard` is `true` or `false`). |
 
-The repository has a ready Prometheus and Grafana stack with a dashboard built on these metrics, in `monitoring/`.
+The repository has a ready Prometheus and Grafana stack with a dashboard built on these metrics: refer to [Monitoring](monitoring.md).
 
 With `sip.options({ deviceTag: true })`, every metric also gets a `device` tag with the device name.
 
