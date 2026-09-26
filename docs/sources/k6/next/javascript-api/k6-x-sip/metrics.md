@@ -37,6 +37,18 @@ RTP metrics are reported once per call leg, when a connected call ends.
 
 `direction` is `out` for the caller's leg and `in` for the callee's leg.
 
+## Counters for dashboards
+
+Rate metrics and trend percentiles are cumulative over the whole run in most outputs, so a degradation in the middle of a long test barely moves them. These counters can be turned into per-window rates in Prometheus or InfluxDB.
+
+| Metric | Type | Tags | Description |
+| --- | --- | --- | --- |
+| `sip_calls` | Counter | `phase` | Answered outgoing calls (`answered`) and their end (`ended`). `answered − ended` is the number of calls in progress. |
+| `sip_call_results` | Counter | `result`, `status` | Outgoing calls by outcome: `success`, `failure` or `cancelled` (this side hung up before an answer, by `hangup()` or the no-answer timeout), with the final INVITE status. |
+| `rtp_legs` | Counter | `codec`, `direction`, `heard` | Call legs by whether they heard audio (`heard` is `true` or `false`). |
+
+The repository has a ready Prometheus and Grafana stack with a dashboard built on these metrics, in `monitoring/`.
+
 With `sip.options({ deviceTag: true })`, every metric also gets a `device` tag with the device name.
 
 ## Metrics as operational questions

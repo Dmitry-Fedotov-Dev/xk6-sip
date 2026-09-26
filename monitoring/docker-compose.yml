@@ -1,0 +1,50 @@
+# Prometheus + Grafana for xk6-sip runs.
+#
+#   docker compose -f monitoring/docker-compose.yml up -d
+#   K6_PROMETHEUS_RW_SERVER_URL=http://localhost:9091/api/v1/write \
+#   K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM=true \
+#   ./k6 run -o experimental-prometheus-rw --tag testid=run-1 examples/call.js
+#
+# Dashboard: http://localhost:3001 (no login, local use only).
+#
+# The project name and ports are chosen so the stack can run next to another
+# Prometheus/Grafana on the same machine: compose projects are identified by
+# name, and a second "monitoring" project would take over its containers and
+# volumes.
+name: xk6-sip-monitoring
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-remote-write-receiver
+      - --enable-feature=native-histograms
+    ports:
+      - "127.0.0.1:9091:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    depends_on:
+      - prometheus
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/xk6-sip.json
+    ports:
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+
+volumes:
+  prometheus-data:
+  grafana-data:

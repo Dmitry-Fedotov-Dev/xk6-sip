@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: xk6-sip
+    folder: xk6-sip
+    type: file
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

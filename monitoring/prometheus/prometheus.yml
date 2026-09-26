@@ -1,0 +1,9 @@
+# k6 pushes metrics with remote write, so nothing needs to be scraped
+# except Prometheus itself.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

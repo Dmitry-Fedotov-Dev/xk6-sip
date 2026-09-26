@@ -185,8 +185,36 @@ bin/k6 run -e REGISTRAR=sip:pbx:5060 -e A_USER=701@pbx -e A_PASS=... -e A_EXT=70
 | `rtp_packets_sent` / `_received` / `_lost` | counter | codec, direction (per call leg) |
 | `rtp_jitter` | trend | RFC 3550 interarrival jitter per leg |
 | `rtp_audio_heard` | rate | legs that received audio; < 1 means one-way audio |
+| `sip_calls` | counter | phase: answered, ended (answered − ended = calls in progress) |
+| `sip_call_results` | counter | result (success, failure, cancelled), status |
+| `rtp_legs` | counter | codec, direction, heard (true/false) |
 
-`sip.options({ deviceTag: true })` adds a `device` tag to all of them.
+`sip.options({ deviceTag: true })` adds a `device` tag to all of them. The last
+three counters exist for dashboards: rates and trend percentiles are cumulative
+over the whole run in most outputs, counters can be turned into per-window rates.
+
+## Monitoring
+
+`monitoring/` holds Prometheus and Grafana with a ready dashboard: calls per
+second by status, setup time, post-dial delay, INVITE routing time, one-way
+audio, jitter, RTP loss, registrations, failed expectations and generator
+health.
+
+```sh
+docker compose -f monitoring/docker-compose.yml up -d
+
+K6_PROMETHEUS_RW_SERVER_URL=http://localhost:9091/api/v1/write \
+K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM=true \
+bin/k6 run -o experimental-prometheus-rw \
+  --tag testid=run-1 --tag pbx_version=4.2.1 examples/call.js
+```
+
+Open http://localhost:3001 (no login; the stack is for local use and binds to
+127.0.0.1). Native histograms give percentiles per time window, so a
+degradation in the middle of a long run is visible. `testid` and
+`pbx_version` tags let you pick a run and compare PBX versions.
+
+![xk6-sip dashboard](monitoring/img/dashboard.png)
 
 ## Layout
 
