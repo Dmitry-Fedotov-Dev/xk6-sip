@@ -181,6 +181,8 @@ bin/k6 run -e REGISTRAR=sip:pbx:5060 -e A_USER=701@pbx -e A_PASS=... -e A_EXT=70
 | `sip_call_duration` | trend | ended_by |
 | `sip_invite_delivery_time` | trend | caller's INVITE → callee receives it |
 | `sip_registrations` | counter | |
+| `sip_invite_first_response_time` | trend | INVITE → first response (100 Trying); above T1 = 500 ms it is retransmitted |
+| `sip_retransmissions` | counter | method, kind (request/response), status |
 | `sip_expect_failed` | counter | expect |
 | `rtp_packets_sent` / `_received` / `_lost` | counter | codec, direction (per call leg) |
 | `rtp_jitter` | trend | RFC 3550 interarrival jitter per leg |
@@ -195,10 +197,12 @@ over the whole run in most outputs, counters can be turned into per-window rates
 
 ## Monitoring
 
-`monitoring/` holds Prometheus and Grafana with a ready dashboard: calls per
-second by status, setup time, post-dial delay, INVITE routing time, one-way
-audio, jitter, RTP loss, registrations, failed expectations and generator
-health.
+`monitoring/` holds Prometheus and Grafana with a ready dashboard: ASR, SEER
+(RFC 6076), ALOC and SLA shares, calls per second by status, setup time,
+post-dial delay, INVITE routing and first response time, SIP retransmissions,
+one-way audio, jitter, RTP loss, registrations, failed expectations, and the
+load generator: machine CPU, memory and network plus the k6 process's own CPU,
+memory and SIP/RTP traffic.
 
 ```sh
 docker compose -f monitoring/docker-compose.yml up -d
@@ -206,8 +210,16 @@ docker compose -f monitoring/docker-compose.yml up -d
 K6_PROMETHEUS_RW_SERVER_URL=http://localhost:9091/api/v1/write \
 K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM=true \
 bin/k6 run -o experimental-prometheus-rw \
-  --tag testid=run-1 --tag pbx_version=4.2.1 examples/call.js
+  --tag testid=run-1 --tag pbx_version=4.2.1 \
+  -e SIP_METRICS_ADDR=127.0.0.1:6566 examples/call.js
 ```
+
+`SIP_METRICS_ADDR` (or `sip.options({ metricsAddr })` in any script) makes k6
+serve its own resource usage at `/metrics`. Machine metrics come from
+node-exporter (`--profile linux-host`) on Linux, or from
+[windows_exporter](https://github.com/prometheus-community/windows_exporter)
+started on a Windows host with
+`--collectors.enabled=cpu,memory,net,os,system --web.listen-address=127.0.0.1:9182`.
 
 Open http://localhost:3001 (no login; the stack is for local use and binds to
 127.0.0.1). Native histograms give percentiles per time window, so a

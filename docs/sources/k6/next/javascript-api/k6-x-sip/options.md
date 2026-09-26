@@ -16,6 +16,7 @@ Sets options that apply to all devices of the k6 process. Call it in the init co
 | options.expectTimeout | duration | `'30s'` | Default timeout of `expectCall()`, every `expect*()` method and `isHeard()`, used when the call doesn't pass its own. |
 | options.trace | boolean | `false` | Keep full SIP messages, with headers and SDP, in [`call.trace()`](call/trace.md). By default only the first line of each message is kept. |
 | options.deviceTag | boolean | `false` | Add a `device` tag with the device name to every SIP and RTP metric. Useful for debugging; it multiplies the number of time series by the number of devices. |
+| options.metricsAddr | string | off | Address such as `'127.0.0.1:6566'` where the k6 process serves its own resource usage for Prometheus at `/metrics`: CPU, memory, goroutines, SIP and RTP traffic of all devices, devices and calls in progress. Refer to [Monitoring](monitoring.md). |
 | options.media | boolean | `true` | `false` disables RTP for all calls, for signalling-only load. |
 | options.codecs | string or array | `'PCMU,PCMA'` | Offered codecs in order of preference, for example `'PCMA,PCMU'` or `['PCMA']`. The aliases `ulaw`, `alaw`, `G711U` and `G711A` are accepted. |
 | options.audio | [audio](audio.md), `'tone'` or `'silence'` | `'tone'` | What calls send: a WAV file, a 1 kHz tone at −20 dBFS, or silence. |

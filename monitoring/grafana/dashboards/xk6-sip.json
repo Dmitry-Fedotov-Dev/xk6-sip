@@ -89,6 +89,26 @@
             "selected": false
           }
         ]
+      },
+      {
+        "name": "sla_setup",
+        "label": "SLA setup, s",
+        "type": "textbox",
+        "query": "0.3",
+        "current": {
+          "text": "0.3",
+          "value": "0.3"
+        }
+      },
+      {
+        "name": "sla_pdd",
+        "label": "SLA PDD, s",
+        "type": "textbox",
+        "query": "2",
+        "current": {
+          "text": "2",
+          "value": "2"
+        }
       }
     ]
   },
@@ -246,8 +266,8 @@
     },
     {
       "type": "stat",
-      "title": "Call success",
-      "description": "Share of answered calls among answered + failed, over the selected window. Cancelled (no answer) calls are excluded.",
+      "title": "ASR",
+      "description": "Answer-seizure ratio: answered calls / all call attempts over the window, cancelled included. Depends on the traffic mix: busy and no-answer calls lower it without any fault in the PBX.",
       "targets": [
         {
           "refId": "A",
@@ -255,7 +275,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(rate(k6_sip_call_results_total{testid=~\"$testid\", pbx_version=~\"$pbx_version\", result=\"success\"}[$window])) / sum(rate(k6_sip_call_results_total{testid=~\"$testid\", pbx_version=~\"$pbx_version\", result=~\"success|failure\"}[$window]))",
+          "expr": "sum(rate(k6_sip_call_results_total{testid=~\"$testid\", pbx_version=~\"$pbx_version\", result=\"success\"}[$window])) / sum(rate(k6_sip_call_results_total{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window]))",
           "legendFormat": "__auto",
           "range": true,
           "instant": false
@@ -315,6 +335,75 @@
     },
     {
       "type": "stat",
+      "title": "SEER",
+      "description": "RFC 6076 Session Establishment Effectiveness Ratio: answered calls plus calls the user declined (480, 486, 600, 603) / all attempts except 3xx. Network and server failures (404, 5xx, timeouts) lower it; user behaviour does not.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(rate(k6_sip_call_results_total{testid=~\"$testid\", pbx_version=~\"$pbx_version\", status=~\"200|480|486|600|603\"}[$window])) or vector(0)) / sum(rate(k6_sip_call_results_total{testid=~\"$testid\", pbx_version=~\"$pbx_version\", status!~\"3..\"}[$window]))",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.95
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "id": 5,
+      "gridPos": {
+        "x": 12,
+        "y": 1,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "stat",
       "title": "One-way audio",
       "description": "Share of call legs that heard no audio from the other side, over the window. Anything above 0 is a real user-facing problem.",
       "targets": [
@@ -354,75 +443,6 @@
             "mode": "thresholds"
           },
           "decimals": 2
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "colorMode": "background",
-        "graphMode": "area",
-        "textMode": "value",
-        "justifyMode": "center"
-      },
-      "id": 5,
-      "gridPos": {
-        "x": 12,
-        "y": 1,
-        "w": 4,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      }
-    },
-    {
-      "type": "stat",
-      "title": "Setup time p95",
-      "description": "INVITE sent to final response, 95th percentile over the window.",
-      "targets": [
-        {
-          "refId": "A",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "histogram_quantile(0.95, sum(rate(k6_sip_call_setup_time_seconds{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window])))",
-          "legendFormat": "__auto",
-          "range": true,
-          "instant": false
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.2
-              },
-              {
-                "color": "red",
-                "value": 0.3
-              }
-            ]
-          },
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 3
         },
         "overrides": []
       },
@@ -517,13 +537,419 @@
       }
     },
     {
-      "type": "row",
-      "title": "Signalling — does the PBX connect calls, and how fast",
-      "collapsed": false,
+      "type": "stat",
+      "title": "Setup time p95",
+      "description": "INVITE sent to final response, 95th percentile over the window.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(k6_sip_call_setup_time_seconds{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window])))",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.2
+              },
+              {
+                "color": "red",
+                "value": 0.3
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
       "id": 8,
       "gridPos": {
         "x": 0,
         "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Setup within SLA",
+      "description": "Share of answered calls set up faster than the SLA variable sla_setup (seconds, top of the dashboard), over the window.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_fraction(0, $sla_setup, sum(rate(k6_sip_call_setup_time_seconds{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window])))",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.95
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "id": 9,
+      "gridPos": {
+        "x": 4,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "PDD within SLA",
+      "description": "Share of calls whose post-dial delay (INVITE to first 18x) is below the SLA variable sla_pdd (seconds), over the window.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_fraction(0, $sla_pdd, sum(rate(k6_sip_post_dial_delay_seconds{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window])))",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.95
+              },
+              {
+                "color": "green",
+                "value": 0.99
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "id": 10,
+      "gridPos": {
+        "x": 8,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "ALOC",
+      "description": "Average length of conversation over the window. A drop at constant load means the PBX cuts calls.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(histogram_sum(rate(k6_sip_call_duration_seconds{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window]))) / sum(histogram_count(rate(k6_sip_call_duration_seconds{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window])))",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "id": 11,
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "First response p95",
+      "description": "INVITE sent to its first response (usually 100 Trying), 95th percentile. Above T1 = 500 ms the INVITE gets retransmitted.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(k6_sip_invite_first_response_time_seconds{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window])))",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.2
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "id": 12,
+      "gridPos": {
+        "x": 16,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Retransmissions",
+      "description": "SIP messages sent again per second because the peer did not answer or acknowledge them in time. Above 0 under load is an early sign of overload.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(k6_sip_retransmissions_total{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window])) or vector(0)",
+          "legendFormat": "__auto",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: /s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.001
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value",
+        "justifyMode": "center"
+      },
+      "id": 13,
+      "gridPos": {
+        "x": 20,
+        "y": 5,
+        "w": 4,
+        "h": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "row",
+      "title": "Signalling — does the PBX connect calls, and how fast",
+      "collapsed": false,
+      "id": 14,
+      "gridPos": {
+        "x": 0,
+        "y": 9,
         "w": 24,
         "h": 1
       },
@@ -578,10 +1004,10 @@
           "sort": "desc"
         }
       },
-      "id": 9,
+      "id": 15,
       "gridPos": {
         "x": 0,
-        "y": 6,
+        "y": 10,
         "w": 12,
         "h": 8
       },
@@ -677,10 +1103,10 @@
           "sort": "desc"
         }
       },
-      "id": 10,
+      "id": 16,
       "gridPos": {
         "x": 12,
-        "y": 6,
+        "y": 10,
         "w": 12,
         "h": 8
       },
@@ -749,10 +1175,10 @@
           "sort": "desc"
         }
       },
-      "id": 11,
+      "id": 17,
       "gridPos": {
         "x": 0,
-        "y": 14,
+        "y": 18,
         "w": 8,
         "h": 8
       },
@@ -821,10 +1247,10 @@
           "sort": "desc"
         }
       },
-      "id": 12,
+      "id": 18,
       "gridPos": {
         "x": 8,
-        "y": 14,
+        "y": 18,
         "w": 8,
         "h": 8
       },
@@ -876,10 +1302,232 @@
       "options": {
         "showHeader": true
       },
-      "id": 13,
+      "id": 19,
       "gridPos": {
         "x": 16,
-        "y": 14,
+        "y": 18,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "INVITE first response time",
+      "description": "INVITE sent to its first response, usually 100 Trying. Until it arrives the transaction layer retransmits the INVITE every T1 = 500 ms (dashed line), doubling. A p95 near the line means the PBX is too slow to even acknowledge calls.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.5, sum(rate(k6_sip_invite_first_response_time_seconds{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window])))",
+          "legendFormat": "p50",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(k6_sip_invite_first_response_time_seconds{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window])))",
+          "legendFormat": "p95",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(k6_sip_invite_first_response_time_seconds{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window])))",
+          "legendFormat": "p99",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 20,
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "SIP retransmissions",
+      "description": "Messages sent again by the transaction layer per second: requests the peer did not answer (INVITE, BYE, REGISTER...) and final responses it did not acknowledge. Retransmissions add load to an already slow PBX; growth under load is an early sign of an overload collapse.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (method, kind) (rate(k6_sip_retransmissions_total{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window]))",
+          "legendFormat": "{{method}} {{kind}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: /s",
+          "custom": {
+            "drawStyle": "bars",
+            "lineWidth": 2,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0,
+          "noValue": "no retransmissions"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 21,
+      "gridPos": {
+        "x": 8,
+        "y": 26,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Calls per second by response class",
+      "description": "Final INVITE responses grouped by class. 5xx means the server failed; 4xx is mostly the user or routing (busy, not found, unavailable).",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (class) (label_replace(rate(k6_sip_call_results_total{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window]), \"class\", \"${1}xx\", \"status\", \"([0-9])..\"))",
+          "legendFormat": "{{class}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix: calls/s",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 60,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 22,
+      "gridPos": {
+        "x": 16,
+        "y": 26,
         "w": 8,
         "h": 8
       },
@@ -892,10 +1540,10 @@
       "type": "row",
       "title": "Media — do people hear each other",
       "collapsed": false,
-      "id": 14,
+      "id": 23,
       "gridPos": {
         "x": 0,
-        "y": 22,
+        "y": 34,
         "w": 24,
         "h": 1
       },
@@ -966,10 +1614,10 @@
           "sort": "desc"
         }
       },
-      "id": 15,
+      "id": 24,
       "gridPos": {
         "x": 0,
-        "y": 23,
+        "y": 35,
         "w": 12,
         "h": 8
       },
@@ -1027,10 +1675,10 @@
           "sort": "desc"
         }
       },
-      "id": 16,
+      "id": 25,
       "gridPos": {
         "x": 12,
-        "y": 23,
+        "y": 35,
         "w": 12,
         "h": 8
       },
@@ -1089,10 +1737,10 @@
           "sort": "desc"
         }
       },
-      "id": 17,
+      "id": 26,
       "gridPos": {
         "x": 0,
-        "y": 31,
+        "y": 43,
         "w": 12,
         "h": 8
       },
@@ -1161,10 +1809,10 @@
           "sort": "desc"
         }
       },
-      "id": 18,
+      "id": 27,
       "gridPos": {
         "x": 12,
-        "y": 31,
+        "y": 43,
         "w": 12,
         "h": 8
       },
@@ -1177,10 +1825,10 @@
       "type": "row",
       "title": "Registrations and requests — does the registrar keep up",
       "collapsed": false,
-      "id": 19,
+      "id": 28,
       "gridPos": {
         "x": 0,
-        "y": 39,
+        "y": 51,
         "w": 24,
         "h": 1
       },
@@ -1263,10 +1911,10 @@
           "sort": "desc"
         }
       },
-      "id": 20,
+      "id": 29,
       "gridPos": {
         "x": 0,
-        "y": 40,
+        "y": 52,
         "w": 12,
         "h": 8
       },
@@ -1324,10 +1972,10 @@
           "sort": "desc"
         }
       },
-      "id": 21,
+      "id": 30,
       "gridPos": {
         "x": 12,
-        "y": 40,
+        "y": 52,
         "w": 12,
         "h": 8
       },
@@ -1340,10 +1988,10 @@
       "type": "row",
       "title": "Scenario — what went wrong from the test's point of view",
       "collapsed": false,
-      "id": 22,
+      "id": 31,
       "gridPos": {
         "x": 0,
-        "y": 48,
+        "y": 60,
         "w": 24,
         "h": 1
       },
@@ -1399,10 +2047,10 @@
           "sort": "desc"
         }
       },
-      "id": 23,
+      "id": 32,
       "gridPos": {
         "x": 0,
-        "y": 49,
+        "y": 61,
         "w": 12,
         "h": 8
       },
@@ -1460,10 +2108,10 @@
           "sort": "desc"
         }
       },
-      "id": 24,
+      "id": 33,
       "gridPos": {
         "x": 12,
-        "y": 49,
+        "y": 61,
         "w": 12,
         "h": 8
       },
@@ -1476,10 +2124,10 @@
       "type": "row",
       "title": "Generator health — is it the PBX or the test rig",
       "collapsed": false,
-      "id": 25,
+      "id": 34,
       "gridPos": {
         "x": 0,
-        "y": 57,
+        "y": 69,
         "w": 24,
         "h": 1
       },
@@ -1545,10 +2193,10 @@
           "sort": "desc"
         }
       },
-      "id": 26,
+      "id": 35,
       "gridPos": {
         "x": 0,
-        "y": 58,
+        "y": 70,
         "w": 8,
         "h": 8
       },
@@ -1606,10 +2254,10 @@
           "sort": "desc"
         }
       },
-      "id": 27,
+      "id": 36,
       "gridPos": {
         "x": 8,
-        "y": 58,
+        "y": 70,
         "w": 8,
         "h": 8
       },
@@ -1678,10 +2326,438 @@
           "sort": "desc"
         }
       },
-      "id": 28,
+      "id": 37,
       "gridPos": {
         "x": 16,
-        "y": 58,
+        "y": 70,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Machine CPU",
+      "description": "CPU utilisation of the load generator machine, all cores. From windows_exporter or node-exporter (job=host).",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "1 - avg(rate(windows_cpu_time_total{job=\"host\", mode=\"idle\"}[$window])) or 1 - avg(rate(node_cpu_seconds_total{job=\"host\", mode=\"idle\"}[$window]))",
+          "legendFormat": "CPU",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "max": 1,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 38,
+      "gridPos": {
+        "x": 0,
+        "y": 78,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Machine memory",
+      "description": "Physical memory of the load generator machine: used and total.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(windows_memory_physical_total_bytes{job=\"host\"} - windows_memory_available_bytes{job=\"host\"}) or sum(node_memory_MemTotal_bytes{job=\"host\"} - node_memory_MemAvailable_bytes{job=\"host\"})",
+          "legendFormat": "used",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(windows_memory_physical_total_bytes{job=\"host\"}) or sum(node_memory_MemTotal_bytes{job=\"host\"})",
+          "legendFormat": "total",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 39,
+      "gridPos": {
+        "x": 8,
+        "y": 78,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Machine network",
+      "description": "Traffic of the machine's network interfaces. Loopback traffic (a PBX on the same machine) does not appear here; the k6 process panel counts it.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(windows_net_bytes_received_total{job=\"host\"}[$window])) or sum(rate(node_network_receive_bytes_total{job=\"host\", device!~\"lo|veth.*|docker.*|br-.*\"}[$window]))",
+          "legendFormat": "received",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(windows_net_bytes_sent_total{job=\"host\"}[$window])) or sum(rate(node_network_transmit_bytes_total{job=\"host\", device!~\"lo|veth.*|docker.*|br-.*\"}[$window]))",
+          "legendFormat": "sent",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 40,
+      "gridPos": {
+        "x": 16,
+        "y": 78,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "k6 process CPU",
+      "description": "CPU used by the k6 process; 100% = one full core. Goroutines on the right axis.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(rate(process_cpu_seconds_total{job=\"k6\"}[$window]))",
+          "legendFormat": "CPU",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(go_goroutines{job=\"k6\"})",
+          "legendFormat": "goroutines",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "goroutines"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 41,
+      "gridPos": {
+        "x": 0,
+        "y": 86,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "k6 process memory",
+      "description": "Resident memory of the k6 process and the Go heap in use. A steady climb over a long run is a leak in the generator, not in the PBX.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(process_resident_memory_bytes{job=\"k6\"})",
+          "legendFormat": "resident",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(go_memstats_heap_inuse_bytes{job=\"k6\"})",
+          "legendFormat": "Go heap in use",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 42,
+      "gridPos": {
+        "x": 8,
+        "y": 86,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "k6 process network",
+      "description": "UDP payload on all SIP and RTP sockets of the k6 process, by protocol and direction. Loopback traffic included.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (proto, direction) (rate(xk6sip_network_bytes_total{job=\"k6\"}[$window]))",
+          "legendFormat": "{{proto}} {{direction}}",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 43,
+      "gridPos": {
+        "x": 16,
+        "y": 86,
         "w": 8,
         "h": 8
       },

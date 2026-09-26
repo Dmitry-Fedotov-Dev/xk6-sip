@@ -30,8 +30,34 @@ docker compose -f monitoring/docker-compose.yml down
 | --- | --- | --- |
 | Grafana | http://localhost:3001 | No login (anonymous admin); the dashboard is the home page. |
 | Prometheus | http://localhost:9091 | No auth; k6 pushes metrics here. |
+| k6 process metrics | http://localhost:6566/metrics | Served by k6 itself when the script sets `metricsAddr`; scraped by Prometheus as `job="k6"`. |
+| Machine metrics | http://localhost:9182/metrics | windows_exporter on a Windows load generator, or the `linux-host` profile (node-exporter) on Linux; scraped as `job="host"`. |
 
 Both ports are bound to 127.0.0.1. The stack is meant for a workstation: on a shared server, disable anonymous access and set an admin password. The compose project is named `xk6-sip-monitoring` and uses ports 3001 and 9091, so it can run next to another Prometheus and Grafana on the same machine.
+
+## Load generator resources
+
+Two things answer "is it the PBX or the test rig": the k6 process and the machine it runs on.
+
+**k6 process.** Add `metricsAddr` to the script. Prometheus reaches it through `host.docker.internal`, also when it listens on 127.0.0.1:
+
+```javascript
+sip.options({ metricsAddr: '127.0.0.1:6566' });
+```
+
+`examples/call.js` does this when started with `-e SIP_METRICS_ADDR=127.0.0.1:6566`.
+
+**Machine.** On Linux, start the stack with the `linux-host` profile:
+
+```bash
+docker compose -f monitoring/docker-compose.yml --profile linux-host up -d
+```
+
+On Windows a container sees the Docker VM, not the host, so run [windows_exporter](https://github.com/prometheus-community/windows_exporter) on the host:
+
+```powershell
+windows_exporter.exe --collectors.enabled=cpu,memory,net,os,system --web.listen-address=127.0.0.1:9182
+```
 
 ## Tags and variables
 
@@ -40,6 +66,7 @@ Both ports are bound to 127.0.0.1. The stack is meant for a workstation: on a sh
 | `--tag testid=...` | Name of the run. Pick one or several runs in the **Test run** list. |
 | `--tag pbx_version=...` | Version of the PBX under test. Pick versions in the **PBX version** list to compare them. |
 | **Window** (30s, 1m, 5m) | Window for rates, shares and percentiles. A short window shows spikes sooner, a long one smooths noise. |
+| **SLA setup, s** / **SLA PDD, s** | Limits for the SLA tiles: the share of calls set up, and hearing ringback, faster than this. Defaults 0.3 s and 2 s. |
 
 ## Why native histograms and counters
 
@@ -50,27 +77,35 @@ When k6 sends metrics to Prometheus, trend percentiles and Rate metrics are cumu
 
 ## Dashboard
 
-22 panels in six rows. Every panel has a description behind the ⓘ icon next to its title.
+37 panels in six rows. Every panel has a description behind the ⓘ icon next to its title.
 
 | Row | Question | Panels |
 | --- | --- | --- |
-| Overview | The state of the run in five seconds | CAPS, calls in progress, call success, one-way audio, setup time p95, dropped iterations |
-| Signalling | Does the PBX connect calls, and how fast? | Calls per second by final status, call setup time p50/p95/p99, post-dial delay, INVITE routing time, failed calls by status |
+| Overview | The state of the run in five seconds | CAPS, calls in progress, ASR, SEER, one-way audio, dropped iterations; setup time p95, setup within SLA, PDD within SLA, ALOC, first response p95, retransmissions |
+| Signalling | Does the PBX connect calls, and how fast? | Calls per second by final status and by response class, call setup time p50/p95/p99, post-dial delay, INVITE routing time, failed calls by status, INVITE first response time with the T1 line, SIP retransmissions |
 | Media | Do people hear each other? | One-way audio, jitter p95 by leg, RTP packet loss, RTP packets per second |
 | Registrations and requests | Does the registrar keep up? | Registrations by status with cumulative p95, failed requests by method |
 | Scenario | What went wrong from the test's point of view? | Failed expectations by type, calls ending per second by who hung up |
-| Generator health | Is it the PBX or the test rig? | VUs and calls in progress, dropped iterations, iteration duration |
+| Generator health | Is it the PBX or the test rig? | VUs and calls in progress, dropped iterations, iteration duration; machine CPU, memory and network; k6 process CPU with goroutines, memory (resident, Go heap) and SIP/RTP traffic |
+
+### ASR, SEER and ALOC
+
+| Tile | Formula | Reading |
+| --- | --- | --- |
+| ASR | answered / all call attempts | Depends on the traffic mix: busy and unanswered calls lower it without any fault. |
+| SEER (RFC 6076) | (200 + 480 + 486 + 600 + 603) / attempts without 3xx | Only network and server failures lower it (404, 5xx, timeouts). ASR falling while SEER stays near 100% points at the users, not the PBX. |
+| ALOC | total talk time / answered calls | A drop at constant load means the PBX cuts calls. |
 
 ## Reading the dashboard
 
 | Situation | What you see | What to do |
 | --- | --- | --- |
-| The PBX is overloaded | Setup time p95/p99 and post-dial delay grow; 503 or 480 appear by final status; call success drops | The capacity is the CAPS at which setup time stopped being flat. Record it for this PBX version. |
+| The PBX is overloaded | Setup time p95/p99, post-dial delay and first response time grow; first response p95 approaches the 500 ms line; retransmissions appear; 503 or 480 appear by final status; SEER drops | The capacity is the CAPS at which setup time stopped being flat. Record it for this PBX version. |
 | One-way audio | One-way audio is red while call success is green; `heard` grows in failed expectations | Check jitter by leg and the `direction` tag to see which way audio is missing; check NAT and the media server. |
 | Calls go to the wrong place | `call` grows in failed expectations, status codes may still be 200 | Check the dial plan and caller ID rules; print `call.trace()` in the script to see where the INVITE went. |
 | The PBX drops calls | The `remote` or `error` share grows in calls ending by who hung up, although the script hangs up itself | Look at session timers and channel limits on the PBX. |
 | The registrar can't keep up | Codes other than 200 and 401 appear in registrations; p95 grows; REGISTER shows up in failed requests | Lower `registerRate` in [options()](options.md) or record the registrar's limit. |
-| The generator is the limit | Dropped iterations above 0; CAPS below the target; VUs at the maximum | Raise `preAllocatedVUs` (CAPS × call duration). Don't trust this run's results. |
+| The generator is the limit | Dropped iterations above 0; CAPS below the target; VUs at the maximum; machine or k6 process CPU near 100% while jitter grows | Raise `preAllocatedVUs` (CAPS × call duration). Don't trust this run's results. |
 | A new PBX version degraded | At the same load profile, setup time p95 or the failure share is higher than for the previous version | Select both versions in **PBX version** and compare. |
 
 The dashboard shows the whole picture. For a single call, print [`call.trace()`](call/trace.md) when a check fails.
@@ -82,4 +117,6 @@ The dashboard shows the whole picture. For a single call, print [`call.trace()`]
 - RTP counters are reported when a call ends, so packet rates and loss lag behind by the call duration.
 - Calls in progress is `answered − ended`. If an iteration ends before its call does, the end event can be lost and the number drifts up. The examples always wait for `expectDisconnected()`.
 - On Windows, Go's clock ticks in about 0.5 ms steps; measure precise timings on Linux.
-- CPU and memory of the k6 process are not collected; add node-exporter or a similar agent on the load generator host.
+- Process and machine metrics carry no `testid`: pick the run by its time range.
+- Machine network counts only physical interfaces. With a PBX on the same machine, calls go over loopback; the k6 process network panel shows them.
+- Retransmissions of reliable provisional responses (100rel) are not counted.

@@ -5,6 +5,10 @@
 #   K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM=true \
 #   ./k6 run -o experimental-prometheus-rw --tag testid=run-1 examples/call.js
 #
+# Resource usage of the load generator: add sip.options({ metricsAddr:
+# '127.0.0.1:6566' }) to the script (k6 process) and run windows_exporter or
+# the linux-host profile (machine).
+#
 # Dashboard: http://localhost:3001 (no login, local use only).
 #
 # The project name and ports are chosen so the stack can run next to another
@@ -24,9 +28,23 @@ services:
       - --enable-feature=native-histograms
     ports:
       - "127.0.0.1:9091:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # Linux; Docker Desktop has it built in
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
+
+  # Load generator machine metrics on Linux hosts:
+  #   docker compose -f monitoring/docker-compose.yml --profile linux-host up -d
+  # On Windows run windows_exporter on the host instead (see README).
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    profiles: ["linux-host"]
+    command:
+      - --path.rootfs=/host
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
 
   grafana:
     image: grafana/grafana:11.5.2

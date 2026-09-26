@@ -21,6 +21,8 @@ The module reports these metrics in addition to the [built-in k6 metrics](https:
 | `sip_call_success` | Rate | `status` | Share of outgoing calls that were answered. `status` is the final INVITE status. Calls this side cancelled before an answer, with `hangup()` or the no-answer timeout, are not counted. |
 | `sip_call_duration` | Trend | `ended_by` | Talk time of outgoing calls, from answer to end. `ended_by` is `local`, `remote`, `timeout` or `error`. |
 | `sip_invite_delivery_time` | Trend | | Time from the caller device sending INVITE to the callee device receiving it: how long the PBX took to route the call. Reported when `expectCall()` names the caller device. |
+| `sip_invite_first_response_time` | Trend | `method` | INVITE sent to its first response, usually `100 Trying`. Until it arrives the INVITE is retransmitted every T1 = 500 ms, doubling. |
+| `sip_retransmissions` | Counter | `method`, `kind`, `status` | Messages sent again by the transaction layer because the peer did not answer or acknowledge them: requests (`kind=request`) and final responses (`kind=response`, with `status`). Growth under load is an early sign of overload. |
 | `sip_expect_failed` | Counter | `expect` | Expectations that returned `false`. `expect` names which one: `call`, `ringing`, `connected`, `disconnected`, `heard`, `dtmf`, `hold`, `unhold`, `transfer`, `transferred`, `referred call`. |
 
 ## RTP
@@ -36,6 +38,17 @@ RTP metrics are reported once per call leg, when a connected call ends.
 | `rtp_audio_heard` | Rate | `codec`, `direction` | Share of legs that heard audio from the other side. Below 1 means one-way or no audio. |
 
 `direction` is `out` for the caller's leg and `in` for the callee's leg.
+
+## Process metrics
+
+With `sip.options({ metricsAddr: '127.0.0.1:6566' })` the k6 process serves these metrics for Prometheus to scrape at `/metrics`, next to the standard `process_*` (CPU seconds, resident memory) and `go_*` (heap, goroutines) metrics. They describe the load generator, not the test, so they carry no k6 tags.
+
+| Metric | Type | Labels | Description |
+| --- | --- | --- | --- |
+| `xk6sip_network_bytes_total` | Counter | `proto` (`sip`, `rtp`), `direction` (`in`, `out`) | UDP payload on all SIP and RTP sockets of the process, loopback included. |
+| `xk6sip_network_packets_total` | Counter | `proto`, `direction` | UDP datagrams on the same sockets. |
+| `xk6sip_devices` | Gauge | | Devices with an open socket. |
+| `xk6sip_calls_in_progress` | Gauge | | Answered outgoing calls that have not ended. |
 
 ## Counters for dashboards
 
