@@ -24,7 +24,9 @@ export const options = {
   },
 };
 
-sip.options({ registerRate: 50, deviceTag: __ENV.DEVICE_TAG === '1' });
+// SIP_METRICS_ADDR=127.0.0.1:6566 exposes CPU, memory and SIP/RTP traffic of
+// this k6 process for Prometheus (monitoring/).
+sip.options({ registerRate: 50, deviceTag: __ENV.DEVICE_TAG === '1', metricsAddr: __ENV.SIP_METRICS_ADDR || '' });
 
 const subs = new SharedArray('subscribers', () =>
   papaparse.parse(open('./subscribers.csv'), { header: true, skipEmptyLines: true }).data);

@@ -21,11 +21,12 @@ func init() {
 // RootModule is shared by all VUs; it owns the single SIP engine of the
 // process so that engine-wide limits (register rate) apply to the whole test.
 type RootModule struct {
-	mu      sync.Mutex
-	opts    moduleOptions
-	engine  *engine.Engine
-	metrics *sipMetrics
-	audio   audioCache
+	mu       sync.Mutex
+	opts     moduleOptions
+	engine   *engine.Engine
+	metrics  *sipMetrics
+	audio    audioCache
+	exporter processExporter
 }
 
 type moduleOptions struct {
@@ -94,7 +95,8 @@ func (mi *ModuleInstance) shutdown() {
 // before the first device is used; later calls with different values fail.
 //
 //	sip.options({ localIP: '10.0.0.5', registerRate: 50, ringTimeout: '3m',
-//	              expectTimeout: '30s', trace: false, deviceTag: false })
+//	              expectTimeout: '30s', trace: false, deviceTag: false,
+//	              metricsAddr: '127.0.0.1:6566' })
 func (mi *ModuleInstance) options(v sobek.Value) {
 	rt := mi.vu.Runtime()
 	obj := objectArg(rt, v, "options")
@@ -115,6 +117,14 @@ func (mi *ModuleInstance) options(v sobek.Value) {
 		common.Throw(rt, errors.New("sip.options: engine options cannot change after the first device was used"))
 	}
 	r.opts = o
+
+	// Resource usage of the k6 process for Prometheus; started once, in the
+	// init context of the first VU.
+	if addr := stringField(rt, obj, "metricsAddr", ""); addr != "" {
+		if err := r.exporter.start(addr, r); err != nil {
+			common.Throw(rt, err)
+		}
+	}
 }
 
 func sameEngineOptions(a, b engine.Options) bool {

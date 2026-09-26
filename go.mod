@@ -7,11 +7,13 @@ require (
 	github.com/grafana/sobek v0.0.0-20260908083152-4698bc773ae7
 	github.com/icholy/digest v1.1.0
 	github.com/pion/sdp/v3 v3.0.20
+	github.com/prometheus/client_golang v1.24.1
 	go.k6.io/k6/v2 v2.3.0
 	golang.org/x/time v0.16.0
 )
 
 require (
+	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dlclark/regexp2/v2 v2.7.2 // indirect
@@ -30,7 +32,11 @@ require (
 	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mstoykov/atlas v0.0.0-20220811071828-388f114305dd // indirect
+	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
+	github.com/prometheus/client_model v0.6.2 // indirect
+	github.com/prometheus/common v0.70.1 // indirect
+	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/serenize/snaker v0.0.0-20201027110005-a7ad2135616e // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/afero v1.1.2 // indirect

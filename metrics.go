@@ -31,6 +31,10 @@ type sipMetrics struct {
 	calls       *metrics.Metric
 	callResults *metrics.Metric
 	rtpLegs     *metrics.Metric
+	// Overload signals: slow first answers make the transaction layer
+	// retransmit, and retransmissions add load to the system under test.
+	firstResponse   *metrics.Metric
+	retransmissions *metrics.Metric
 }
 
 func registerMetrics(reg *metrics.Registry) (*sipMetrics, error) {
@@ -60,6 +64,8 @@ func registerMetrics(reg *metrics.Registry) (*sipMetrics, error) {
 		{&m.calls, "sip_calls", metrics.Counter, metrics.Default},
 		{&m.callResults, "sip_call_results", metrics.Counter, metrics.Default},
 		{&m.rtpLegs, "rtp_legs", metrics.Counter, metrics.Default},
+		{&m.firstResponse, "sip_invite_first_response_time", metrics.Trend, metrics.Time},
+		{&m.retransmissions, "sip_retransmissions", metrics.Counter, metrics.Default},
 	} {
 		if *d.dst, err = reg.NewMetric(d.name, d.typ, d.vt); err != nil {
 			return nil, err
@@ -180,4 +186,16 @@ func (o *vuObserver) Media(e engine.MediaEvent) {
 	}
 	o.push(o.m.rtpAudioHeard, heard, tags)
 	o.push(o.m.rtpLegs, 1, map[string]string{"codec": st.Codec, "direction": e.Direction.String(), "heard": heardTag})
+}
+
+func (o *vuObserver) FirstResponse(e engine.FirstResponseEvent) {
+	o.push(o.m.firstResponse, ms(e.Delay), map[string]string{"method": e.Method})
+}
+
+func (o *vuObserver) Retransmission(e engine.RetransmissionEvent) {
+	kind, status := "request", ""
+	if e.Status != 0 {
+		kind, status = "response", strconv.Itoa(e.Status)
+	}
+	o.push(o.m.retransmissions, 1, map[string]string{"method": e.Method, "kind": kind, "status": status})
 }
