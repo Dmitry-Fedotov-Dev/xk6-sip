@@ -26,6 +26,11 @@ type sipMetrics struct {
 	rtpLost          *metrics.Metric
 	rtpJitter        *metrics.Metric
 	rtpAudioHeard    *metrics.Metric
+	// Counters for time-windowed views (dashboards): Rate metrics are
+	// cumulative in most outputs, counters can be turned into rates.
+	calls       *metrics.Metric
+	callResults *metrics.Metric
+	rtpLegs     *metrics.Metric
 }
 
 func registerMetrics(reg *metrics.Registry) (*sipMetrics, error) {
@@ -52,6 +57,9 @@ func registerMetrics(reg *metrics.Registry) (*sipMetrics, error) {
 		{&m.rtpLost, "rtp_packets_lost", metrics.Counter, metrics.Default},
 		{&m.rtpJitter, "rtp_jitter", metrics.Trend, metrics.Time},
 		{&m.rtpAudioHeard, "rtp_audio_heard", metrics.Rate, metrics.Default},
+		{&m.calls, "sip_calls", metrics.Counter, metrics.Default},
+		{&m.callResults, "sip_call_results", metrics.Counter, metrics.Default},
+		{&m.rtpLegs, "rtp_legs", metrics.Counter, metrics.Default},
 	} {
 		if *d.dst, err = reg.NewMetric(d.name, d.typ, d.vt); err != nil {
 			return nil, err
@@ -112,9 +120,19 @@ func (o *vuObserver) Request(e engine.RequestEvent) {
 }
 
 func (o *vuObserver) CallSetup(e engine.CallSetupEvent) {
+	status := strconv.Itoa(e.Status)
 	if e.Cancelled && !e.Success {
-		return // the script hung up before answer; neither success nor failure
+		// We hung up before answer (script or no-answer timeout): neither
+		// success nor failure for sip_call_success.
+		o.push(o.m.callResults, 1, map[string]string{"result": "cancelled", "status": status})
+		return
 	}
+	result := "failure"
+	if e.Success {
+		result = "success"
+		o.push(o.m.calls, 1, map[string]string{"phase": "answered"})
+	}
+	o.push(o.m.callResults, 1, map[string]string{"result": result, "status": status})
 	ok := 0.0
 	if e.Success {
 		ok = 1
@@ -123,12 +141,14 @@ func (o *vuObserver) CallSetup(e engine.CallSetupEvent) {
 	if e.HasPDD {
 		o.push(o.m.postDialDelay, ms(e.PDD), nil)
 	}
-	o.push(o.m.callSuccess, ok, map[string]string{"status": strconv.Itoa(e.Status)})
+	o.push(o.m.callSuccess, ok, map[string]string{"status": status})
 }
 
 func (o *vuObserver) CallEnd(e engine.CallEndEvent) {
 	if e.Direction == engine.Outgoing {
 		o.push(o.m.callDuration, ms(e.Duration), map[string]string{"ended_by": string(e.EndedBy)})
+		// answered - ended = calls in progress
+		o.push(o.m.calls, 1, map[string]string{"phase": "ended"})
 	}
 }
 
@@ -154,9 +174,10 @@ func (o *vuObserver) Media(e engine.MediaEvent) {
 	if st.PacketsReceived > 1 {
 		o.push(o.m.rtpJitter, ms(st.Jitter), tags)
 	}
-	heard := 0.0
+	heard, heardTag := 0.0, "false"
 	if st.Heard > 0 {
-		heard = 1
+		heard, heardTag = 1, "true"
 	}
 	o.push(o.m.rtpAudioHeard, heard, tags)
+	o.push(o.m.rtpLegs, 1, map[string]string{"codec": st.Codec, "direction": e.Direction.String(), "heard": heardTag})
 }
