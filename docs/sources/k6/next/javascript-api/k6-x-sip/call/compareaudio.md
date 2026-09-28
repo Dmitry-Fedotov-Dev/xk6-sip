@@ -37,7 +37,9 @@ An object, or `null` if there is too little audio to compare (under 32 ms, or th
 | clippedStart | number | The part of the first word that was lost, ms: gaps from the start of the reference speech until audio is first heard. |
 | gain | number | Level of the heard audio relative to the reference, dB. |
 
-Every call also adds its score to the `rtp_audio_score` metric, so `thresholds` can check the scores of the whole test.
+Every call also adds its score to the `rtp_audio_score` metric, so `thresholds` can check the scores of the whole test. That includes deliberate negative checks such as "B does not hear itself", so leave them out of scripts whose thresholds use this metric.
+
+Checks on the returned score are ordinary script checks: unlike failed `expect*()` methods, they don't make `record: 'onFailure'` save the call. Call [saveRecording()](saverecording.md) yourself when such a check fails, as `examples/functional/audio-quality.js` does.
 
 ### Example
 

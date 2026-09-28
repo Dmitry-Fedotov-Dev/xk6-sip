@@ -18,13 +18,15 @@ const env = (k, d) => __ENV[k] || d;
 const registrar = env('REGISTRAR', 'sip:127.0.0.1:5070');
 
 // device('A', 1) -> user1@test.local, ext 1001 unless overridden by A_*.
-export function device(name, n) {
+// extra adds Device options such as audio or record.
+export function device(name, n, extra = {}) {
   return new sip.Device({
     device: name,
     registrar,
     user: env(`${name}_USER`, `user${n}@test.local`),
     pass: env(`${name}_PASS`, 'secret'),
     ext: env(`${name}_EXT`, String(1000 + n)),
+    ...extra,
   });
 }
 
