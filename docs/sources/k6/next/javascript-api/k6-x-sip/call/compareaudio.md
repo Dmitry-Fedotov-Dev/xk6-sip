@@ -20,6 +20,21 @@ Recording must be on for the call (`record: true` or `'onFailure'`); refer to [s
 
 The idea follows full-reference quality models such as ViSQOL in a much simpler form. The score is not a MOS: use it to compare runs, versions and calls with each other and set the threshold from a clean baseline run.
 
+### Reading the score
+
+Values measured with the speech-like signals of the extension's tests and on calls through a test PBX:
+
+| Situation | score | gaps |
+| --- | --- | --- |
+| Clean G.711 path, any delay | 0.99 | 0 |
+| Same, 12 dB quieter | ≥ 0.93 | 0 |
+| 20% of packets lost | ~0.75 | equal to the lost speech |
+| Unrelated speech (wrong party, crossed media) | < 0.4 | — |
+| Silence (one-way audio) | 0 | the whole reference |
+| The subscriber's own phrase instead of the other party's | ~0.1 | — |
+
+A threshold of 0.9 fits a clean G.711 path. Transcoding (G.729, Opus) changes the waveform and lowers the score, so measure a baseline first and lower the threshold accordingly.
+
 | Parameter | Type | Description |
 | --- | --- | --- |
 | reference | [audio](../audio.md) | The expected audio: `sip.audio(open('ref.wav', 'b'))` or `sip.tone(...)`. |
@@ -45,7 +60,7 @@ An object, or `null` if there is too little audio to compare (under 32 ms, or th
 
 Every call also adds its score to the `rtp_audio_score` metric, so `thresholds` can check the scores of the whole test. That includes deliberate negative checks such as "B does not hear itself", so leave them out of scripts whose thresholds use this metric.
 
-Checks on the returned score are ordinary script checks: unlike failed `expect*()` methods, they don't make `record: 'onFailure'` save the call. Call [saveRecording()](saverecording.md) yourself when such a check fails, as `examples/functional/audio-quality.js` does.
+Checks on the returned score are ordinary script checks: unlike failed `expect*()` methods, they don't make `record: 'onFailure'` save the call. Call [saveRecording()](saverecording.md) yourself when such a check fails, as the [audio quality functional test](https://github.com/Dmitry-Fedotov-Dev/xk6-sip/blob/main/examples/functional/audio-quality.js) does.
 
 ### Example
 
