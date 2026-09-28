@@ -21,7 +21,7 @@ Sets options that apply to all devices of the k6 process. Call it in the init co
 | options.codecs | string or array | `'PCMU,PCMA'` | Offered codecs in order of preference, for example `'PCMA,PCMU'` or `['PCMA']`. The aliases `ulaw`, `alaw`, `G711U` and `G711A` are accepted. |
 | options.audio | [audio](audio.md), `'tone'` or `'silence'` | `'tone'` | What calls send: a WAV file, a 1 kHz tone at −20 dBFS, or silence. |
 | options.heardLevel | number | `-45` | Level in dBFS above which received audio counts as heard by [`isHeard()`](call/isheard.md). |
-| options.record | boolean or `'onFailure'` | `false` | Keep the audio of calls for [`saveRecording()`](call/saverecording.md) and [`compareAudio()`](call/compareaudio.md). `'onFailure'` also saves calls with a failed expectation to `recordDir`. About 32 KB of memory per second of call. |
+| options.record | boolean or `'onFailure'` | `false` | Keep the audio of calls for [`saveRecording()`](call/saverecording.md) and [`compareAudio()`](call/compareaudio.md). `'onFailure'` also saves calls with a failed expectation to `recordDir`. Costs 32 KB of memory per second of each recorded call leg: about 1 GB for 1,000 legs of 30 s at once. Refer to [saveRecording()](call/saverecording.md#performance). |
 | options.recordDir | string | `'recordings'` for `'onFailure'` | Directory where finished calls are saved automatically: failed ones with `'onFailure'`, all with `true`. |
 
 The media options `media`, `codecs`, `audio`, `heardLevel`, `record` and `recordDir` are defaults. A [Device](device/_index.md) can override them for its calls, and a single [`call()`](device/call.md) can override them again.

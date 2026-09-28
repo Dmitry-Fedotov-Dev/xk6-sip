@@ -142,6 +142,11 @@ check(q, { 'B hears A clearly': (q) => q && q.score >= 0.9 });
 inc.saveRecording('records/b.wav');  // left: what B heard, right: what B sent
 ```
 
+Recording is off by default. When on, it costs 32 KB of memory per second of
+each recorded leg (about 1 GB for 1,000 legs of 30 s at once), and one
+`compareAudio()` takes about 15 ms of CPU for a 30 s recording: under load,
+record and compare a sample of the calls.
+
 ### Hold and transfer
 
 ```js

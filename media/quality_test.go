@@ -225,3 +225,16 @@ func TestRecordingWAV(t *testing.T) {
 		}
 	}
 }
+
+// BenchmarkCompare is a 3 s reference in a 30 s recording of one leg.
+func BenchmarkCompare(b *testing.B) {
+	ref := speechLike(7, 3*time.Second)
+	heard := make([]int16, 0, 30*sampleRate)
+	for len(heard)+len(ref) <= 30*sampleRate {
+		heard = append(heard, g711(ref)...)
+	}
+	b.ResetTimer()
+	for range b.N {
+		Compare(ref, heard)
+	}
+}

@@ -24,6 +24,12 @@ The idea follows full-reference quality models such as ViSQOL in a much simpler 
 | --- | --- | --- |
 | reference | [audio](../audio.md) | The expected audio: `sip.audio(open('ref.wav', 'b'))` or `sip.tone(...)`. |
 
+### Performance
+
+`compareAudio()` runs in the VU that calls it and takes CPU time proportional to the length of the recording times the length of the reference: about **15 ms** to find a 3-second reference in a 30-second recording on a desktop CPU, plus about 0.7 MB of short-lived memory. Recording itself is required, with its memory cost: refer to [saveRecording()](saverecording.md#performance).
+
+In functional tests this is negligible. Under load, 1,000 comparisons a second would need about 15 CPU cores, so compare a sample of the calls, keep the reference short (3–5 s of speech is enough), and don't compare long recordings: the time grows with the whole recording, not with the part that matters. Take the comparison soon after the phrase has played rather than at the end of a long call.
+
 ### Returns
 
 An object, or `null` if there is too little audio to compare (under 32 ms, or the reference is silent). Without recording or media it returns `null` and logs a warning.

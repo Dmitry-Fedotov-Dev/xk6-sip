@@ -32,7 +32,29 @@ Audio is placed by RTP timestamps, not in arrival order: a lost packet becomes 2
 
 Automatic files are named `<device>_<in|out>_<Call-ID>.wav`.
 
-A recording takes about 32 KB of memory per second of call until the call object is released: 1 MB for a 30-second call. Under load prefer `'onFailure'` and short calls, or record only some of the calls.
+### Performance
+
+Recording is off by default and costs nothing then: a stream without `record` keeps no audio, and the only extra work per RTP packet is one check.
+
+With `record` on, the cost is **memory**, not CPU. Each recorded call leg keeps what it heard and sent as 16-bit samples: **32 KB per second of call**, about 1.9 MB per minute. The audio stays in memory from the start of the call until the call object is released after the iteration, whether or not it is saved.
+
+| Recorded legs at once | Call length | Memory |
+| --- | --- | --- |
+| 1 | 30 s | ~1 MB |
+| 100 | 30 s | ~94 MB |
+| 1,000 | 30 s | **~1 GB** |
+| 1,000 | 3 min | ~5.6 GB |
+
+A call counts once per recorded side: when both A and B belong to the script and both record, 1,000 calls are 2,000 legs, about 2 GB. One leg is capped at 15 minutes (about 29 MB); a longer call keeps only its beginning.
+
+Files are written only by `saveRecording()` or the automatic saving: the same 32 KB per second, so a 30-second leg is about 0.94 MB on disk. Saving everything from 100 such calls with both sides takes about 190 MB; `'onFailure'` saves only the failed ones.
+
+Under load:
+
+- record a sample of the calls, for example one device in ten, rather than all of them;
+- keep recorded calls short;
+- use `'onFailure'` so that disk use follows the number of failures;
+- watch the memory panel of the load generator (refer to [Monitoring](../monitoring.md)): a recording load looks like a steady rise in resident memory that falls back when calls end.
 
 ### Example
 
