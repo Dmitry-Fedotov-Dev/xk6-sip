@@ -26,6 +26,7 @@ func newJSCall(d *jsDevice, c *engine.Call) *jsCall {
 func (c *jsCall) expect(what string, ok bool) bool {
 	if !ok {
 		c.dev.obs.expectFailed(what)
+		c.call.MarkFailed()
 	}
 	return ok
 }

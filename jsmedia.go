@@ -86,6 +86,8 @@ func (mi *ModuleInstance) tone(freq, dbfs sobek.Value) *jsAudio {
 //	{ codecs: 'PCMA,PCMU' }            // preference order
 //	{ audio: sip.audio(...) | 'tone' | 'silence' }
 //	{ heardLevel: -45 }                // dBFS threshold for isHeard
+//	{ record: true | 'onFailure' }     // keep the audio; see saveRecording
+//	{ recordDir: 'recordings' }        // where finished calls are saved
 func mediaFields(rt *sobek.Runtime, obj *sobek.Object, base engine.MediaOptions) (engine.MediaOptions, bool) {
 	mo, changed := base, false
 	if v := obj.Get("media"); isSet(v) {
@@ -126,6 +128,32 @@ func mediaFields(rt *sobek.Runtime, obj *sobek.Object, base engine.MediaOptions)
 	if v := obj.Get("heardLevel"); isSet(v) {
 		mo.HeardLevel, changed = v.ToFloat(), true
 	}
+	if v := obj.Get("record"); isSet(v) {
+		switch x := v.Export().(type) {
+		case bool:
+			mo.Record = engine.RecordOff
+			if x {
+				mo.Record = engine.RecordAlways
+			}
+		case string:
+			switch x {
+			case "onFailure":
+				mo.Record = engine.RecordOnFailure
+			case "always":
+				mo.Record = engine.RecordAlways
+			case "off":
+				mo.Record = engine.RecordOff
+			default:
+				common.Throw(rt, fmt.Errorf("record: expected true, false or 'onFailure', got %q", x))
+			}
+		default:
+			common.Throw(rt, fmt.Errorf("record: expected true, false or 'onFailure'"))
+		}
+		changed = true
+	}
+	if v := obj.Get("recordDir"); isSet(v) {
+		mo.RecordDir, changed = v.String(), true
+	}
 	return mo, changed
 }
 
@@ -133,6 +161,7 @@ var silence = sync.OnceValue(media.Silence)
 
 func sameMedia(a, b engine.MediaOptions) bool {
 	return a.Disabled == b.Disabled && a.Audio == b.Audio && a.HeardLevel == b.HeardLevel &&
+		a.Record == b.Record && a.RecordDir == b.RecordDir &&
 		slices.EqualFunc(a.Codecs, b.Codecs, func(x, y media.Codec) bool { return x.Name == y.Name })
 }
 
@@ -173,6 +202,44 @@ func (c *jsCall) ExpectDTMF(want string, timeout sobek.Value) bool {
 
 // ReceivedDTMF returns the digits received so far.
 func (c *jsCall) ReceivedDTMF() string { return c.call.Digits() }
+
+// SaveRecording writes what this side heard (left channel) and sent (right)
+// to a WAV file. Needs record: true or 'onFailure'.
+func (c *jsCall) SaveRecording(path string) bool {
+	if err := c.call.SaveRecording(path); err != nil {
+		c.dev.warn("saveRecording failed", err)
+		return false
+	}
+	return true
+}
+
+// CompareAudio scores what this side heard against the reference audio:
+// {score 0..1, offset, compared, gaps, clippedStart (ms), gain (dB)}, or
+// null when there is not enough audio. Needs record: true or 'onFailure'.
+func (c *jsCall) CompareAudio(ref sobek.Value) sobek.Value {
+	rt := c.dev.mi.vu.Runtime()
+	a, ok := ref.Export().(*jsAudio)
+	if !ok {
+		common.Throw(rt, fmt.Errorf("compareAudio: expected sip.audio(...) or sip.tone(...)"))
+	}
+	q, ok, err := c.call.CompareAudio(a.a)
+	if err != nil {
+		c.dev.warn("compareAudio failed", err)
+		return sobek.Null()
+	}
+	if !ok {
+		return sobek.Null()
+	}
+	c.dev.obs.audioScore(q.Score)
+	return rt.ToValue(map[string]any{
+		"score":        q.Score,
+		"offset":       ms(q.Offset),
+		"compared":     ms(q.Compared),
+		"gaps":         ms(q.Gaps),
+		"clippedStart": ms(q.ClippedStart),
+		"gain":         q.Gain,
+	})
+}
 
 // MediaStats returns {codec, sent, received, lost, jitter (ms), heard (ms),
 // dtmf} or null without media.

@@ -17,7 +17,7 @@ If `callee` is a device, `call()` first makes sure that the callee is registered
 | options.timeout | duration | `'60s'` | No-answer timeout. When it expires, the call is cancelled with CANCEL and [`howCompleted()`](../call/howcompleted.md) reports `endedBy: 'timeout'`. |
 | options.id | string | | Label of the call, returned by `call.id`. Handy in logs. |
 | options.headers | object | | Extra SIP headers for the INVITE, for example `{ 'X-Test-Case': 'TC-101' }`. |
-| options.media, options.codecs, options.audio, options.heardLevel | | device settings | Media settings for this call only. Refer to [options()](../options.md). |
+| options.media, options.codecs, options.audio, options.heardLevel, options.record, options.recordDir | | device settings | Media settings for this call only. Refer to [options()](../options.md). |
 
 ### Returns
 

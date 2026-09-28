@@ -2,12 +2,28 @@ package engine
 
 import (
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/emiago/sipgo/sip"
 
 	"github.com/Dmitry-Fedotov-Dev/xk6-sip/media"
 )
+
+// RecordMode says which calls keep their audio.
+type RecordMode int
+
+const (
+	RecordOff       RecordMode = iota
+	RecordAlways               // every call; saved to RecordDir when it is set
+	RecordOnFailure            // every call, saved to RecordDir only if it failed
+)
+
+// DefaultRecordDir is where RecordOnFailure saves when RecordDir is empty.
+const DefaultRecordDir = "recordings"
 
 // MediaOptions control the RTP side of calls. The zero value means media on
 // with PCMU/PCMA and the default tone.
@@ -17,6 +33,10 @@ type MediaOptions struct {
 	Audio    *media.Audio  // what we send
 	// HeardLevel in dBFS above which received audio counts as heard.
 	HeardLevel float64
+	// Record keeps what the call heard and sent in memory, about 32 KB per
+	// second of call; RecordDir is where finished calls are saved as WAV.
+	Record    RecordMode
+	RecordDir string
 }
 
 // MediaEvent is emitted when a call that had media ends.
@@ -39,7 +59,19 @@ func (d *Device) mediaOptions(override *MediaOptions) MediaOptions {
 }
 
 func (d *Device) newStream(mo MediaOptions) (*media.Stream, error) {
-	return media.New(media.Config{IP: d.ip, Codecs: mo.Codecs, Audio: mo.Audio, HeardLevel: mo.HeardLevel})
+	return media.New(media.Config{
+		IP: d.ip, Codecs: mo.Codecs, Audio: mo.Audio, HeardLevel: mo.HeardLevel,
+		Record: mo.Record != RecordOff,
+	})
+}
+
+// useMedia attaches the call's RTP stream and remembers how to record it.
+func (c *Call) useMedia(st *media.Stream, mo MediaOptions) {
+	c.media = st
+	c.recMode, c.recDir = mo.Record, mo.RecordDir
+	if c.recMode == RecordOnFailure && c.recDir == "" {
+		c.recDir = DefaultRecordDir
+	}
 }
 
 // placeholderSDP is sent when media is disabled: a valid offer/answer whose
@@ -76,6 +108,97 @@ func (c *Call) closeMedia(connected bool) {
 	if connected {
 		c.dev.observer().Media(MediaEvent{Device: c.dev.cfg.ID, Direction: c.dir, Stats: st})
 	}
+	c.autoSave()
+}
+
+// MarkFailed records that a check on this call failed, so RecordOnFailure
+// saves its audio: when the call ends, or right away if it already has.
+func (c *Call) MarkFailed() {
+	c.mu.Lock()
+	c.failed = true
+	c.mu.Unlock()
+	if c.State() == StateEnded {
+		c.autoSave()
+	}
+}
+
+// autoSave writes the recording of an ended call to RecordDir once, if the
+// record mode asks for it.
+func (c *Call) autoSave() {
+	if c.media == nil || c.recDir == "" {
+		return
+	}
+	c.mu.Lock()
+	failed := c.failed || (c.endedBy == EndedByError && !c.tAnswer.IsZero())
+	want := c.recMode == RecordAlways || (c.recMode == RecordOnFailure && failed)
+	if !want || c.saved || c.state != StateEnded {
+		c.mu.Unlock()
+		return
+	}
+	c.saved = true
+	c.mu.Unlock()
+	name := fmt.Sprintf("%s_%s_%s.wav", fileSafe(c.dev.cfg.ID), c.dir, fileSafe(c.callID))
+	if err := c.SaveRecording(filepath.Join(c.recDir, name)); err != nil {
+		c.dev.eng.log.Warn("sip: saving recording failed", "device", c.dev.cfg.ID, "error", err)
+	}
+}
+
+func fileSafe(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '.':
+			return r
+		}
+		return '_'
+	}, s)
+}
+
+var errNotRecorded = errors.New("call is not recorded: set record: true or 'onFailure'")
+
+// Recording is what the call heard and sent so far.
+func (c *Call) Recording() (media.Recording, error) {
+	if c.media == nil {
+		return media.Recording{}, errNoMedia
+	}
+	r, ok := c.media.Recording()
+	if !ok {
+		return media.Recording{}, errNotRecorded
+	}
+	return r, nil
+}
+
+// SaveRecording writes the call's audio to path as a stereo WAV (left: what
+// this side heard, right: what it sent), creating missing directories.
+func (c *Call) SaveRecording(path string) error {
+	r, err := c.Recording()
+	if err != nil {
+		return err
+	}
+	if dir := filepath.Dir(path); dir != "." {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			return err
+		}
+	}
+	f, err := os.Create(path) // #nosec G304 -- the path comes from the test script author
+	if err != nil {
+		return err
+	}
+	if err := r.WriteWAV(f); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+// CompareAudio scores what this side heard against ref. ok is false when
+// there is too little audio to compare.
+func (c *Call) CompareAudio(ref *media.Audio) (media.Quality, bool, error) {
+	r, err := c.Recording()
+	if err != nil {
+		return media.Quality{}, false, err
+	}
+	q, ok := media.Compare(ref.PCM(), r.Heard)
+	return q, ok, nil
 }
 
 // Codec is the negotiated audio codec, "" without media or before SDP.
@@ -132,7 +255,7 @@ func (c *Call) setupIncomingMedia(offer []byte, mo MediaOptions) error {
 	if err != nil {
 		return err
 	}
-	c.media = st
+	c.useMedia(st, mo)
 	if len(offer) == 0 {
 		c.answerSDP, c.ackSDP = st.Offer(media.SendRecv), true
 		return nil

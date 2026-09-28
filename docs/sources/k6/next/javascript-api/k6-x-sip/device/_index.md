@@ -29,7 +29,7 @@ new sip.Device(options)
 | options.displayName | string | | Display name in the From header. |
 | options.sessionExpires | duration | `0` (off) | Request session timers (RFC 4028) on calls this device makes, and offer them on calls it answers. The device refreshes the session, handles `422 Session Interval Too Small` and hangs up a call whose peer stops refreshing it. |
 | options.prack | boolean | `false` | Send `180 Ringing` reliably (RFC 3262) when the caller supports 100rel. Reliable 18x responses from the PBX are always acknowledged with PRACK, whatever this option says. |
-| options.media, options.codecs, options.audio, options.heardLevel | | module defaults | Media settings for calls of this device. Refer to [options()](../options.md). |
+| options.media, options.codecs, options.audio, options.heardLevel, options.record, options.recordDir | | module defaults | Media settings for calls of this device. Refer to [options()](../options.md). |
 | any other field | string | | A number of the subscriber, for example `ext: '701'`, `onk: '+79101110011'`, `gw_num: '84951234567'`. The field name is up to you; scripts refer to it with `aon` and [`identity()`](identity.md). |
 
 ## Properties

@@ -71,6 +71,8 @@ type Call struct {
 	decision   chan decision
 
 	media     *media.Stream
+	recMode   RecordMode
+	recDir    string
 	answerSDP []byte       // our SDP for the 200 OK of an incoming call
 	ackSDP    bool         // INVITE had no offer: the answer comes in the ACK
 	answerHdr []sip.Header // extra headers for that 200 OK (session timer)
@@ -97,6 +99,8 @@ type Call struct {
 	tRing      time.Time
 	tAnswer    time.Time
 	tEnd       time.Time
+	failed     bool // a check on this call failed (RecordOnFailure)
+	saved      bool // recording auto-saved
 	ringing    chan struct{}
 	connected  chan struct{}
 	done       chan struct{}

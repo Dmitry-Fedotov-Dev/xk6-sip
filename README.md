@@ -81,6 +81,7 @@ Full reference with every option and an example per method:
 | `howCompleted()` | `{endedBy, status, reason, duration}` once ended |
 | `trace()` | SIP ladder of this leg |
 | `codec()`, `isHeard(timeout?)`, `mediaStats()` | media checks and RTP statistics |
+| `saveRecording(path)`, `compareAudio(ref)` | WAV of what the leg heard and sent; similarity to a reference with drop-outs and clipped start (need `record`) |
 | `sendDTMF(digits, ms?)`, `expectDTMF(digits, timeout?)`, `receivedDTMF()` | RFC 4733 DTMF |
 | `hold()`, `unhold()`, `isOnHold()`, `isRemoteHold()` | re-INVITE hold |
 | `transfer(dest, aon?)`, `attendedTransfer(consult)` | REFER, REFER with Replaces |
@@ -130,7 +131,16 @@ out.mediaStats();                  // {codec, sent, received, lost, jitter, hear
 ```
 
 Media options (`media`, `codecs`, `audio: sip.audio(...) | sip.tone(freq, dbfs) | 'silence'`,
-`heardLevel`) can be set in `sip.options()`, per Device and per call.
+`heardLevel`, `record`, `recordDir`) can be set in `sip.options()`, per Device and per call.
+
+```js
+sip.options({ record: 'onFailure', recordDir: 'records' }); // WAV of every call with a failed check
+
+const B = new sip.Device({ ..., record: true });
+const q = inc.compareAudio(hello);   // {score, offset, compared, gaps, clippedStart, gain}
+check(q, { 'B hears A clearly': (q) => q && q.score >= 0.9 });
+inc.saveRecording('records/b.wav');  // left: what B heard, right: what B sent
+```
 
 ### Hold and transfer
 
@@ -187,6 +197,7 @@ bin/k6 run -e REGISTRAR=sip:pbx:5060 -e A_USER=701@pbx -e A_PASS=... -e A_EXT=70
 | `rtp_packets_sent` / `_received` / `_lost` | counter | codec, direction (per call leg) |
 | `rtp_jitter` | trend | RFC 3550 interarrival jitter per leg |
 | `rtp_audio_heard` | rate | legs that received audio; < 1 means one-way audio |
+| `rtp_audio_score` | trend | similarity 0..1 of heard audio to a reference, per `compareAudio()` |
 | `sip_calls` | counter | phase: answered, ended (answered − ended = calls in progress) |
 | `sip_call_results` | counter | result (success, failure, cancelled), status |
 | `rtp_legs` | counter | codec, direction, heard (true/false) |

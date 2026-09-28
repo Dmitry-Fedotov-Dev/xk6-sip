@@ -733,7 +733,7 @@ func (d *Device) Call(opts CallOptions) (*Call, error) {
 		if err != nil {
 			return nil, err
 		}
-		c.media = st
+		c.useMedia(st, mo)
 		req.SetBody(st.Offer(media.SendRecv))
 	}
 	c.label = opts.Label

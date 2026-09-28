@@ -26,6 +26,8 @@ type Config struct {
 	// NoLatch disables symmetric RTP: by default we send to where the
 	// peer's packets come from once the first one arrives (NAT, SBCs).
 	NoLatch bool
+	// Record keeps the heard and sent audio for Recording().
+	Record bool
 }
 
 // Stats summarise one stream. Loss and jitter follow RFC 3550.
@@ -82,6 +84,8 @@ type Stream struct {
 	lastEvTS uint32
 	haveEv   bool
 	digitSig chan struct{}
+
+	rec *recorder // nil unless Config.Record
 }
 
 type rxStats struct {
@@ -133,6 +137,9 @@ func New(cfg Config) (*Stream, error) {
 		heardCh:    make(chan struct{}),
 		digitSig:   make(chan struct{}),
 		rxStart:    time.Now(),
+	}
+	if cfg.Record {
+		s.rec = newRecorder()
 	}
 	go s.readLoop()
 	return s, nil
@@ -397,7 +404,11 @@ func (s *Stream) tick() {
 		s.header(uint8(s.remoteDTMF), job.sent == 1 && !end, job.ts) // #nosec G115 -- PT is 0..127
 		n = 16
 	} else {
-		copy(b[12:], s.src[s.pos:s.pos+frameSamples])
+		frame := s.src[s.pos : s.pos+frameSamples]
+		copy(b[12:], frame)
+		if s.rec != nil {
+			s.rec.tx.put(s.rec.at(time.Now()), s.ssrc, ts, frame, s.codec.decode)
+		}
 		s.pos = (s.pos + frameSamples) % len(s.src)
 		s.header(s.codec.PT, s.marker, ts)
 		s.marker = false
@@ -498,23 +509,24 @@ func (s *Stream) receive(b []byte, src *net.UDPAddr) {
 	case s.remoteDTMF >= 0 && int(pt) == s.remoteDTMF, pt == defaultDTMFPT && s.remoteDTMF < 0:
 		s.receiveDTMF(payload, ts)
 	case s.hasCodec && pt == s.codec.PT:
-		s.jitter(now, ts)
-		if s.loud(payload, s.codec.decode) {
-			s.heard++
-			if s.heard == heardFrames {
-				close(s.heardCh)
-			}
-		}
+		s.audioFrame(now, ssrc, ts, payload, s.codec.decode)
 	default:
 		if c, ok := codecByPT(pt); ok { // before negotiation or a codec switch
-			s.jitter(now, ts)
-			if s.loud(payload, c.decode) {
-				s.heard++
-				if s.heard == heardFrames {
-					close(s.heardCh)
-				}
-			}
+			s.audioFrame(now, ssrc, ts, payload, c.decode)
 		}
+	}
+}
+
+func (s *Stream) audioFrame(now time.Time, ssrc, ts uint32, payload []byte, table *[256]int16) {
+	s.jitter(now, ts)
+	if s.loud(payload, table) {
+		s.heard++
+		if s.heard == heardFrames {
+			close(s.heardCh)
+		}
+	}
+	if s.rec != nil {
+		s.rec.rx.put(s.rec.at(now), ssrc, ts, payload, table)
 	}
 }
 

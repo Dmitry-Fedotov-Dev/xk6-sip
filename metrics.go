@@ -35,6 +35,8 @@ type sipMetrics struct {
 	// retransmit, and retransmissions add load to the system under test.
 	firstResponse   *metrics.Metric
 	retransmissions *metrics.Metric
+	// Similarity of heard audio to a reference, one sample per compareAudio.
+	audioScore *metrics.Metric
 }
 
 func registerMetrics(reg *metrics.Registry) (*sipMetrics, error) {
@@ -66,6 +68,7 @@ func registerMetrics(reg *metrics.Registry) (*sipMetrics, error) {
 		{&m.rtpLegs, "rtp_legs", metrics.Counter, metrics.Default},
 		{&m.firstResponse, "sip_invite_first_response_time", metrics.Trend, metrics.Time},
 		{&m.retransmissions, "sip_retransmissions", metrics.Counter, metrics.Default},
+		{&m.audioScore, "rtp_audio_score", metrics.Trend, metrics.Default},
 	} {
 		if *d.dst, err = reg.NewMetric(d.name, d.typ, d.vt); err != nil {
 			return nil, err
@@ -166,6 +169,10 @@ func (o *vuObserver) IncomingCall(e engine.IncomingCallEvent) {
 
 func (o *vuObserver) expectFailed(what string) {
 	o.push(o.m.expectedFailures, 1, map[string]string{"expect": what})
+}
+
+func (o *vuObserver) audioScore(score float64) {
+	o.push(o.m.audioScore, score, nil)
 }
 
 // Media is reported once per call leg when a connected call ends.

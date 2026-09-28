@@ -64,6 +64,8 @@ When a timeout isn't passed, expectations use `expectTimeout` from [options()](.
 | [expectDTMF( digits, [timeout] )](expectdtmf.md) | yes | Waits until the given DTMF digits arrive. |
 | [receivedDTMF()](receiveddtmf.md) | no | DTMF digits received so far. |
 | [mediaStats()](mediastats.md) | no | RTP statistics: packets, loss, jitter, heard time, DTMF. |
+| [saveRecording( path )](saverecording.md) | no | Writes what the leg heard and sent to a WAV file. Needs `record`. |
+| [compareAudio( reference )](compareaudio.md) | no | Scores the heard audio against a reference: similarity, drop-outs, clipped start. Needs `record`. |
 
 ### Hold and transfer
 
