@@ -77,13 +77,13 @@ When k6 sends metrics to Prometheus, trend percentiles and Rate metrics are cumu
 
 ## Dashboard
 
-37 panels in six rows. Every panel has a description behind the ⓘ icon next to its title.
+39 panels in six rows. Every panel has a description behind the ⓘ icon next to its title.
 
 | Row | Question | Panels |
 | --- | --- | --- |
 | Overview | The state of the run in five seconds | CAPS, calls in progress, ASR, SEER, one-way audio, dropped iterations; setup time p95, setup within SLA, PDD within SLA, ALOC, first response p95, retransmissions |
 | Signalling | Does the PBX connect calls, and how fast? | Calls per second by final status and by response class, call setup time p50/p95/p99, post-dial delay, INVITE routing time, failed calls by status, INVITE first response time with the T1 line, SIP retransmissions |
-| Media | Do people hear each other? | One-way audio, jitter p95 by leg, RTP packet loss, RTP packets per second |
+| Media | Do people hear each other? | One-way audio, jitter p95 by leg, RTP packet loss, RTP packets per second; audio quality score (median and worst 5%) and share of compared audio below 0.9, when the script calls `compareAudio()` |
 | Registrations and requests | Does the registrar keep up? | Registrations by status with cumulative p95, failed requests by method |
 | Scenario | What went wrong from the test's point of view? | Failed expectations by type, calls ending per second by who hung up |
 | Generator health | Is it the PBX or the test rig? | VUs and calls in progress, dropped iterations, iteration duration; machine CPU, memory and network; k6 process CPU with goroutines, memory (resident, Go heap) and SIP/RTP traffic |

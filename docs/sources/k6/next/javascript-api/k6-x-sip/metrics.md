@@ -37,6 +37,7 @@ RTP metrics are reported once per call leg, when a connected call ends.
 | `rtp_jitter` | Trend | `codec`, `direction` | Interarrival jitter (RFC 3550). |
 | `rtp_audio_heard` | Rate | `codec`, `direction` | Share of legs that heard audio from the other side. Below 1 means one-way or no audio. |
 | `rtp_audio_score` | Trend | | Similarity 0..1 of heard audio to a reference, one sample per [`compareAudio()`](call/compareaudio.md). |
+| `rtp_audio_mismatch` | Trend | | `1 - rtp_audio_score`, for dashboards. Prometheus native histogram buckets are exponential: about 9% wide near 1, where good scores cluster, and fine near 0. Percentiles of the mismatch keep scores such as 0.99 and 0.95 apart. |
 
 `direction` is `out` for the caller's leg and `in` for the callee's leg.
 

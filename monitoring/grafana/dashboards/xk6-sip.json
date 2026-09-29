@@ -1822,13 +1822,217 @@
       }
     },
     {
-      "type": "row",
-      "title": "Registrations and requests — does the registrar keep up",
-      "collapsed": false,
+      "type": "timeseries",
+      "title": "Audio quality score",
+      "description": "compareAudio() similarity of heard audio to the reference, 0..1. Median and the worst 5% of compared calls; dashed line: 0.9, a clean G.711 path scores ~0.99. Only calls whose script calls compareAudio() with record on.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "1 - histogram_quantile(0.5, sum(rate(k6_rtp_audio_mismatch{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window])))",
+          "legendFormat": "median",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "1 - histogram_quantile(0.95, sum(rate(k6_rtp_audio_mismatch{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window])))",
+          "legendFormat": "worst 5% (p5)",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0.9
+              }
+            ]
+          },
+          "min": 0,
+          "max": 1,
+          "decimals": 3,
+          "noValue": "no audio comparisons"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "id": 28,
       "gridPos": {
         "x": 0,
         "y": 51,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Compared audio below 0.9",
+      "description": "Share of compareAudio() calls scoring below 0.9: wrong party, drop-outs, distortion. Beside it, comparisons per second.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "histogram_fraction(0.1, +Inf, sum(rate(k6_rtp_audio_mismatch{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window])))",
+          "legendFormat": "below 0.9",
+          "range": true,
+          "instant": false
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(histogram_count(sum(rate(k6_rtp_audio_mismatch{testid=~\"$testid\", pbx_version=~\"$pbx_version\"}[$window]))))",
+          "legendFormat": "comparisons/s",
+          "range": true,
+          "instant": false
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0,
+          "noValue": "no audio comparisons"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "below 0.9"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "comparisons/s"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "suffix: /s"
+              },
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 30
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "id": 29,
+      "gridPos": {
+        "x": 12,
+        "y": 51,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      }
+    },
+    {
+      "type": "row",
+      "title": "Registrations and requests — does the registrar keep up",
+      "collapsed": false,
+      "id": 30,
+      "gridPos": {
+        "x": 0,
+        "y": 59,
         "w": 24,
         "h": 1
       },
@@ -1911,10 +2115,10 @@
           "sort": "desc"
         }
       },
-      "id": 29,
+      "id": 31,
       "gridPos": {
         "x": 0,
-        "y": 52,
+        "y": 60,
         "w": 12,
         "h": 8
       },
@@ -1973,10 +2177,10 @@
           "sort": "desc"
         }
       },
-      "id": 30,
+      "id": 32,
       "gridPos": {
         "x": 12,
-        "y": 52,
+        "y": 60,
         "w": 12,
         "h": 8
       },
@@ -1989,10 +2193,10 @@
       "type": "row",
       "title": "Scenario — what went wrong from the test's point of view",
       "collapsed": false,
-      "id": 31,
+      "id": 33,
       "gridPos": {
         "x": 0,
-        "y": 60,
+        "y": 68,
         "w": 24,
         "h": 1
       },
@@ -2048,10 +2252,10 @@
           "sort": "desc"
         }
       },
-      "id": 32,
+      "id": 34,
       "gridPos": {
         "x": 0,
-        "y": 61,
+        "y": 69,
         "w": 12,
         "h": 8
       },
@@ -2109,10 +2313,10 @@
           "sort": "desc"
         }
       },
-      "id": 33,
+      "id": 35,
       "gridPos": {
         "x": 12,
-        "y": 61,
+        "y": 69,
         "w": 12,
         "h": 8
       },
@@ -2125,10 +2329,10 @@
       "type": "row",
       "title": "Generator health — is it the PBX or the test rig",
       "collapsed": false,
-      "id": 34,
+      "id": 36,
       "gridPos": {
         "x": 0,
-        "y": 69,
+        "y": 77,
         "w": 24,
         "h": 1
       },
@@ -2194,10 +2398,10 @@
           "sort": "desc"
         }
       },
-      "id": 35,
+      "id": 37,
       "gridPos": {
         "x": 0,
-        "y": 70,
+        "y": 78,
         "w": 8,
         "h": 8
       },
@@ -2255,10 +2459,10 @@
           "sort": "desc"
         }
       },
-      "id": 36,
+      "id": 38,
       "gridPos": {
         "x": 8,
-        "y": 70,
+        "y": 78,
         "w": 8,
         "h": 8
       },
@@ -2327,10 +2531,10 @@
           "sort": "desc"
         }
       },
-      "id": 37,
+      "id": 39,
       "gridPos": {
         "x": 16,
-        "y": 70,
+        "y": 78,
         "w": 8,
         "h": 8
       },
@@ -2389,10 +2593,10 @@
           "sort": "desc"
         }
       },
-      "id": 38,
+      "id": 40,
       "gridPos": {
         "x": 0,
-        "y": 78,
+        "y": 86,
         "w": 8,
         "h": 8
       },
@@ -2461,10 +2665,10 @@
           "sort": "desc"
         }
       },
-      "id": 39,
+      "id": 41,
       "gridPos": {
         "x": 8,
-        "y": 78,
+        "y": 86,
         "w": 8,
         "h": 8
       },
@@ -2533,10 +2737,10 @@
           "sort": "desc"
         }
       },
-      "id": 40,
+      "id": 42,
       "gridPos": {
         "x": 16,
-        "y": 78,
+        "y": 86,
         "w": 8,
         "h": 8
       },
@@ -2622,10 +2826,10 @@
           "sort": "desc"
         }
       },
-      "id": 41,
+      "id": 43,
       "gridPos": {
         "x": 0,
-        "y": 86,
+        "y": 94,
         "w": 8,
         "h": 8
       },
@@ -2694,10 +2898,10 @@
           "sort": "desc"
         }
       },
-      "id": 42,
+      "id": 44,
       "gridPos": {
         "x": 8,
-        "y": 86,
+        "y": 94,
         "w": 8,
         "h": 8
       },
@@ -2755,10 +2959,10 @@
           "sort": "desc"
         }
       },
-      "id": 43,
+      "id": 45,
       "gridPos": {
         "x": 16,
-        "y": 86,
+        "y": 94,
         "w": 8,
         "h": 8
       },

@@ -1,6 +1,7 @@
 package xk6sip
 
 import (
+	"math"
 	"strconv"
 	"time"
 
@@ -37,6 +38,9 @@ type sipMetrics struct {
 	retransmissions *metrics.Metric
 	// Similarity of heard audio to a reference, one sample per compareAudio.
 	audioScore *metrics.Metric
+	// 1 - score, for dashboards: native histogram buckets are exponential,
+	// fine near 0 and about 9% wide near 1, where scores cluster.
+	audioMismatch *metrics.Metric
 }
 
 func registerMetrics(reg *metrics.Registry) (*sipMetrics, error) {
@@ -69,6 +73,7 @@ func registerMetrics(reg *metrics.Registry) (*sipMetrics, error) {
 		{&m.firstResponse, "sip_invite_first_response_time", metrics.Trend, metrics.Time},
 		{&m.retransmissions, "sip_retransmissions", metrics.Counter, metrics.Default},
 		{&m.audioScore, "rtp_audio_score", metrics.Trend, metrics.Default},
+		{&m.audioMismatch, "rtp_audio_mismatch", metrics.Trend, metrics.Default},
 	} {
 		if *d.dst, err = reg.NewMetric(d.name, d.typ, d.vt); err != nil {
 			return nil, err
@@ -173,6 +178,7 @@ func (o *vuObserver) expectFailed(what string) {
 
 func (o *vuObserver) audioScore(score float64) {
 	o.push(o.m.audioScore, score, nil)
+	o.push(o.m.audioMismatch, math.Round((1-score)*1000)/1000, nil)
 }
 
 // Media is reported once per call leg when a connected call ends.

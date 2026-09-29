@@ -25,6 +25,35 @@ bin/testpbx -addr 127.0.0.1:5070 -users 200 -csv examples/subscribers.csv
 bin/k6 run examples/call.js
 ```
 
+The same run with the Grafana dashboard (Prometheus and Grafana in Docker,
+k6 pushes metrics with remote write):
+
+```sh
+docker compose -f monitoring/docker-compose.yml up -d    # Linux host metrics: add --profile linux-host
+
+K6_PROMETHEUS_RW_SERVER_URL=http://localhost:9091/api/v1/write \
+K6_FEATURES=native-histograms \
+bin/k6 run -o experimental-prometheus-rw \
+  --tag testid=run-1 --tag pbx_version=4.2.1 \
+  -e SIP_METRICS_ADDR=127.0.0.1:6566 examples/call.js
+```
+
+Windows PowerShell:
+
+```powershell
+docker compose -f monitoring/docker-compose.yml up -d
+$env:K6_PROMETHEUS_RW_SERVER_URL = 'http://localhost:9091/api/v1/write'
+$env:K6_FEATURES = 'native-histograms'
+.\bin\k6.exe run -o experimental-prometheus-rw --tag testid=run-1 --tag pbx_version=4.2.1 `
+  -e SIP_METRICS_ADDR=127.0.0.1:6566 examples\call.js
+```
+
+Open http://localhost:3001 and pick the run in **Test run**. `testid` names
+the run, `pbx_version` lets you compare PBX versions, `SIP_METRICS_ADDR` adds
+the k6 process's own CPU, memory and traffic. Stop the stack with
+`docker compose -f monitoring/docker-compose.yml down`; the data stays in its
+volumes. Details: [Monitoring](#monitoring).
+
 Timings below a millisecond are only reliable on Linux: Go's clock on
 Windows ticks in ~0.5 ms steps.
 
@@ -206,6 +235,7 @@ bin/k6 run -e REGISTRAR=sip:pbx:5060 -e A_USER=701@pbx -e A_PASS=... -e A_EXT=70
 | `rtp_jitter` | trend | RFC 3550 interarrival jitter per leg |
 | `rtp_audio_heard` | rate | legs that received audio; < 1 means one-way audio |
 | `rtp_audio_score` | trend | similarity 0..1 of heard audio to a reference, per `compareAudio()` |
+| `rtp_audio_mismatch` | trend | `1 - rtp_audio_score` for dashboards: keeps scores near 1 apart in Prometheus native histograms |
 | `sip_calls` | counter | phase: answered, ended (answered − ended = calls in progress) |
 | `sip_call_results` | counter | result (success, failure, cancelled), status |
 | `rtp_legs` | counter | codec, direction, heard (true/false) |
@@ -219,7 +249,7 @@ over the whole run in most outputs, counters can be turned into per-window rates
 `monitoring/` holds Prometheus and Grafana with a ready dashboard: ASR, SEER
 (RFC 6076), ALOC and SLA shares, calls per second by status, setup time,
 post-dial delay, INVITE routing and first response time, SIP retransmissions,
-one-way audio, jitter, RTP loss, registrations, failed expectations, and the
+one-way audio, jitter, RTP loss, audio quality score (`compareAudio`), registrations, failed expectations, and the
 load generator: machine CPU, memory and network plus the k6 process's own CPU,
 memory and SIP/RTP traffic.
 
