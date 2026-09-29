@@ -106,7 +106,7 @@ jobs:
           echo "START=$(date +%s)" >> "$GITHUB_ENV"
           # 0.0.0.0: Prometheus in Docker reaches the k6 process through the host gateway.
           ./bin/k6 run -o experimental-prometheus-rw --tag testid="$TESTID" --tag pbx_version=testpbx \
-            -e VUS=20 -e DURATION=2m -e HOLD=5 -e SIP_METRICS_ADDR=0.0.0.0:6566 \
+            -e VUS=20 -e DURATION=2m -e HOLD=5 -e AUDIO=1 -e SIP_METRICS_ADDR=0.0.0.0:6566 \
             --summary-export reports/summary.json examples/call.js | tee reports/k6.txt
       - name: dashboard report
         if: always()

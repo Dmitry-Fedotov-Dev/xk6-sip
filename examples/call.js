@@ -24,6 +24,15 @@ export const options = {
   },
 };
 
+// -e AUDIO=1: A says a phrase, B records the call and scores what it heard
+// with compareAudio() (the rtp_audio_score metric and dashboard panels).
+// Costs 32 KB of memory per second of each B leg.
+const audioCheck = __ENV.AUDIO === '1';
+const phrase = audioCheck ? sip.audio(open('./functional/refs/phrase-a.wav', 'b')) : null;
+if (audioCheck) {
+  options.thresholds.rtp_audio_score = ['p(95)>0.9'];
+}
+
 // SIP_METRICS_ADDR=127.0.0.1:6566 exposes CPU, memory and SIP/RTP traffic of
 // this k6 process for Prometheus (monitoring/).
 sip.options({ registerRate: 50, deviceTag: __ENV.DEVICE_TAG === '1', metricsAddr: __ENV.SIP_METRICS_ADDR || '' });
@@ -34,8 +43,8 @@ const subs = new SharedArray('subscribers', () =>
 // Declared in init: no network yet. REGISTER goes out on first use.
 // __VU is 0 while k6 reads options, hence the max().
 const pair = Math.max(__VU - 1, 0) * 2;
-const ua1 = new sip.Device(subs[pair]);
-const ua2 = new sip.Device(subs[pair + 1]);
+const ua1 = new sip.Device(audioCheck ? { ...subs[pair], audio: phrase } : subs[pair]);
+const ua2 = new sip.Device(audioCheck ? { ...subs[pair + 1], record: true } : subs[pair + 1]);
 
 export default function () {
   const out = ua1.call({ callee: ua2, aon: 'ext' });
@@ -56,6 +65,10 @@ export default function () {
 
   check(inc.isHeard('2s'), { 'B hears A': (ok) => ok });
   sleep(Number(__ENV.HOLD || 1) + Math.random()); // talk time, s
+  if (audioCheck) {
+    const q = inc.compareAudio(phrase); // needs HOLD >= 3: one full phrase
+    check(q, { 'B hears A clearly': (q) => q !== null && q.score >= 0.9 && q.gaps < 100 });
+  }
   inc.hangup();
   check(out.expectDisconnected('5s'), { 'A disconnected': (ok) => ok });
   sleep(0.5);
