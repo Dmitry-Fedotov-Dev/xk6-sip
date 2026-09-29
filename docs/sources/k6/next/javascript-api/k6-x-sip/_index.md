@@ -1,6 +1,6 @@
 ---
 title: 'k6/x/sip'
-description: 'k6/x/sip drives SIP subscribers that register, call each other through a PBX and check signalling, audio and DTMF.'
+description: 'k6/x/sip drives SIP subscribers that register, call each other through a PBX and check signalling, audio, voice quality and DTMF, in functional and load tests.'
 weight: 11
 ---
 
@@ -21,6 +21,7 @@ xk6 build v2.3.0 --with github.com/Dmitry-Fedotov-Dev/xk6-sip@latest
 - **Numbers (identities).** A subscriber usually has several numbers: an extension, an external number, a gateway number. They are plain fields of the Device, for example `ext: '701', onk: '+79101110011'`. Scripts refer to them by name with the `aon` option, so a test says "call B on its external number" instead of hard-coding digits.
 - **Actions never wait, only expectations wait.** `call()`, `accept()`, `hangup()`, `hold()`, `transfer()` and `sendDTMF()` return at once; the SIP exchange continues in the background. Methods whose name starts with `expect`, and `isHeard()`, wait for something to happen and return `false` on timeout instead of throwing. Because of this rule, one VU can play both ends of a call: `call()` returns before the callee answers, so the script can go on to `expectCall()` and `accept()` on the other device.
 - **Media.** Every call sends real RTP (G.711), a 1 kHz tone unless told otherwise. The receiver checks the signal level, so `isHeard()` means "audio arrived", not "packets arrived". Set `media: false` for signalling-only load.
+- **Voice quality.** With `record` on, a call keeps what each subscriber heard. [`compareAudio()`](call/compareaudio.md) scores it against the expected phrase: wrong party (crossed media), echo, drop-outs, a clipped first word and distortion lower the score. The same method verifies IVR prompts and announcements against recorded references, and [`saveRecording()`](call/saverecording.md) writes the audio to a WAV file for listening. Refer to [Voice quality testing](#voice-quality-testing).
 
 ## API
 
@@ -107,6 +108,32 @@ export const options = {
 };
 ```
 
+## Voice quality testing
+
+A `200 OK` doesn't mean that people hear each other. The module checks the audio itself, at three levels:
+
+| Question | How | Catches |
+| --- | --- | --- |
+| Does any audio arrive? | [`isHeard()`](call/isheard.md), the `rtp_audio_heard` metric | one-way audio, no audio, silence or comfort noise instead of speech |
+| Is it the right audio, undistorted? | [`compareAudio()`](call/compareaudio.md) against the phrase the other side sends, the `rtp_audio_score` metric | crossed media (hearing the wrong party), echo, packet loss, drop-outs, a clipped first word after answer, distortion |
+| Did the PBX play the right prompt? | [`compareAudio()`](call/compareaudio.md) against a recorded reference | wrong IVR menu or announcement, missing music on hold |
+
+For analysis, [`saveRecording()`](call/saverecording.md) writes a stereo WAV of what a subscriber heard and said, and `record: 'onFailure'` keeps only the calls that failed. RTP loss, jitter and codec come from [`mediaStats()`](call/mediastats.md) and the `rtp_*` metrics.
+
+<!-- md-k6:skip -->
+
+```javascript
+const hello = sip.audio(open('./refs/hello.wav', 'b'));
+const A = new sip.Device({ /* ... */ audio: hello });           // A says the phrase
+const B = new sip.Device({ /* ... */ record: 'onFailure' });    // B's audio is kept
+
+// ... A calls B, B answers, the phrase plays ...
+const q = inc.compareAudio(hello);
+check(q, { 'B hears A clearly': (q) => q && q.score >= 0.9 && q.gaps < 100 });
+```
+
+A complete scenario is in [audio-quality.js](https://github.com/Dmitry-Fedotov-Dev/xk6-sip/blob/main/examples/functional/audio-quality.js). The Grafana dashboard shows the score next to signalling and generator metrics; refer to [Monitoring](monitoring.md).
+
 ## Subscribers from a CSV file
 
 Device options are plain strings, so a CSV row can be passed to the constructor as is. Every column that is not a known option becomes a number of the subscriber.
@@ -149,3 +176,4 @@ Every timeout and duration option accepts a string such as `'500ms'`, `'10s'` or
 | Session timers | RFC 4028: refresh, 422 and Min-SE |
 | Transfers | REFER with NOTIFY sipfrag (RFC 3515), Replaces (RFC 3891) |
 | Media | RTP with G.711 μ-law and A-law, symmetric RTP, loss and jitter per RFC 3550, DTMF per RFC 4733 |
+| Audio analysis | audio presence by signal level, call recording to WAV, voice quality score against a reference (alignment and telephone-band spectrogram correlation) |

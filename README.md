@@ -1,13 +1,43 @@
 # xk6-sip
 
-k6 extension `k6/x/sip` for load testing PBXs and SIP servers with scripted
-subscribers: each VU owns real SIP devices that register, call each other
-through the system under test and check what arrives on the other side.
+k6 extension `k6/x/sip` for load testing and functional testing of PBXs and
+SIP servers with scripted subscribers: each VU owns real SIP devices that
+register, call each other through the system under test and check what
+arrives on the other side — signalling, audio and voice quality.
 
 Status: REGISTER, INVITE/CANCEL/BYE with digest auth; RTP with G.711
 (PCMU/PCMA), RFC 3550 loss/jitter, RFC 4733 DTMF and audio detection;
+call recording and voice quality scoring against a reference;
 hold/resume, blind and attended transfer (REFER, Replaces), PRACK (100rel)
 and session timers.
+
+## Voice quality and audio testing
+
+Most SIP load tools stop at signalling: a call that got `200 OK` counts as
+good even if nobody hears anything. xk6-sip checks the audio itself, in the
+same script, under load:
+
+- **Audio presence and one-way audio detection** — `isHeard()` checks the
+  signal level, not just that RTP packets flow; `rtp_audio_heard` gives the
+  share of call legs that heard the other side.
+- **Voice quality score against a reference** — `compareAudio()` aligns
+  what a subscriber heard with the expected phrase and scores it 0..1, with
+  drop-outs, a clipped first word and the level difference. It catches
+  distorted audio, packet loss, crossed media (hearing the wrong party),
+  echo and silence.
+- **IVR prompt and announcement verification** — compare what the PBX
+  played (menu prompt, "subscriber unavailable", music on hold) with a
+  recorded reference.
+- **Call recording** — `saveRecording()` writes a stereo WAV of what a
+  subscriber heard and said; `record: 'onFailure'` keeps only the calls that
+  failed, for analysis after a CI run.
+- **RTP statistics per call leg** — packet loss, RFC 3550 jitter, codec,
+  DTMF (RFC 4733), exported as k6 metrics and to Prometheus/Grafana.
+- **Voice quality on the dashboard** — median and worst 5% of scores and the
+  share of calls below a threshold, next to signalling and generator metrics.
+
+See the [audio quality functional test](examples/functional/audio-quality.js)
+and [compareAudio()](docs/sources/k6/next/javascript-api/k6-x-sip/call/compareaudio.md).
 
 ## Compatibility
 
