@@ -112,7 +112,7 @@ jobs:
         if: always()
         run: |
           sleep 15 # the last remote write and scrape
-          monitoring/report.sh "$TESTID" $((START - 30)) $(($(date +%s) - 10)) reports/dashboard.png
+          bash monitoring/report.sh "$TESTID" $((START - 30)) $(($(date +%s) - 10)) reports/dashboard.png
       - name: keep reports
         if: always()
         uses: actions/upload-artifact@v7
