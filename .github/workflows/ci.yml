@@ -46,6 +46,7 @@ jobs:
       - name: build k6 and testpbx
         run: |
           go install go.k6.io/xk6@latest
+          mkdir -p bin
           xk6 build v2.3.0 --with github.com/Dmitry-Fedotov-Dev/xk6-sip=. --output bin/k6
           go build -o bin/testpbx ./cmd/testpbx
       - name: run scenarios
