@@ -43,16 +43,29 @@ and [compareAudio()](docs/sources/k6/next/javascript-api/k6-x-sip/call/compareau
 
 | xk6-sip | k6 | Go |
 |---|---|---|
-| v0.1.x – v0.3.x | v2.x (built and tested with v2.3.0) | 1.26+ |
+| v0.1.x – v0.4.x | v2.x (built and tested with v2.3.0) | 1.26+ |
 
 ## Build and run
 
 ```sh
+mkdir -p bin
 xk6 build v2.3.0 --with github.com/Dmitry-Fedotov-Dev/xk6-sip=. --output bin/k6
 go build -o bin/testpbx ./cmd/testpbx
 
-bin/testpbx -addr 127.0.0.1:5070 -users 200 -csv examples/subscribers.csv
+bin/testpbx -addr 127.0.0.1:5070 -users 200 -csv examples/subscribers.csv &
 bin/k6 run examples/call.js
+```
+
+Windows PowerShell: the binaries need the `.exe` extension, and the test PBX
+runs in its own window:
+
+```powershell
+mkdir bin -Force
+xk6 build v2.3.0 --with github.com/Dmitry-Fedotov-Dev/xk6-sip=. --output bin\k6.exe
+go build -o bin\testpbx.exe ./cmd/testpbx
+
+.\bin\testpbx.exe -addr 127.0.0.1:5070 -users 200 -csv examples\subscribers.csv   # window 1
+.\bin\k6.exe run examples\call.js                                                  # window 2
 ```
 
 The same run with the Grafana dashboard (Prometheus and Grafana in Docker,
@@ -241,8 +254,10 @@ artifacts.
 that the other side hears it clearly, without drop-outs or a clipped first
 word, and doesn't hear itself; a failed audio check keeps the WAV of the call.
 
+On Windows, run `.\bin\testpbx.exe` and `.\bin\k6.exe` the same way.
+
 ```sh
-bin/testpbx -addr 127.0.0.1:5070 -users 3
+bin/testpbx -addr 127.0.0.1:5070 -users 3 &
 bin/k6 run -e JUNIT=report.xml examples/functional/attended-transfer.js
 # against a real PBX:
 bin/k6 run -e REGISTRAR=sip:pbx:5060 -e A_USER=701@pbx -e A_PASS=... -e A_EXT=701 ... examples/functional/hold.js
