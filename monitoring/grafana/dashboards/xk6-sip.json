@@ -1865,7 +1865,8 @@
             },
             "thresholdsStyle": {
               "mode": "dashed"
-            }
+            },
+            "axisSoftMin": 0.8
           },
           "color": {
             "mode": "palette-classic"
@@ -1953,7 +1954,8 @@
             "stacking": {
               "mode": "none",
               "group": "A"
-            }
+            },
+            "axisSoftMax": 0.05
           },
           "color": {
             "mode": "palette-classic"
