@@ -33,6 +33,46 @@ jobs:
           xk6 build v2.3.0 --with github.com/Dmitry-Fedotov-Dev/xk6-sip=. --output k6
           ./k6 version
 
+  functional:
+    # Call-flow scenarios from examples/functional against the test PBX:
+    # every step checked, JUnit reports and the WAV of failed audio checks
+    # kept as artifacts.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: build k6 and testpbx
+        run: |
+          go install go.k6.io/xk6@latest
+          xk6 build v2.3.0 --with github.com/Dmitry-Fedotov-Dev/xk6-sip=. --output k6
+          go build -o testpbx ./cmd/testpbx
+      - name: run scenarios
+        run: |
+          ./testpbx -addr 127.0.0.1:5070 -users 3 > testpbx.log 2>&1 &
+          mkdir -p reports
+          cd examples/functional
+          failed=0
+          for s in basic-call hold blind-transfer attended-transfer audio-quality reject-cancel; do
+            echo "::group::$s"
+            if ! ../../k6 run -q -e JUNIT="../../reports/$s.xml" -e RECORD_DIR=../../reports/recordings "$s.js"; then
+              echo "::error title=functional::$s failed"
+              failed=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $failed
+      - name: keep reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: functional-reports
+          path: |
+            reports/
+            testpbx.log
+          if-no-files-found: ignore
+
   lint:
     runs-on: ubuntu-latest
     steps:

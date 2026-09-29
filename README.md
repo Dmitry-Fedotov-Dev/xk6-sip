@@ -232,8 +232,11 @@ supports it (reliable 18x from the PBX are always PRACKed);
 ## Functional tests
 
 `examples/functional/` holds call-flow tests (basic call with DTMF, hold,
-blind and attended transfer, audio quality) for one VU and one iteration: any
-failed step stops the scenario, k6 exits non-zero and writes a JUnit report.
+blind and attended transfer, audio quality, reject/cancel/unknown number) for
+one VU and one iteration: any failed step stops the scenario, k6 exits
+non-zero and writes a JUnit report. CI runs all six against the test PBX on
+every push and keeps the reports and the WAV of failed audio checks as
+artifacts.
 `audio-quality.js` has each side say its own phrase from `refs/` and checks
 that the other side hears it clearly, without drop-outs or a clipped first
 word, and doesn't hear itself; a failed audio check keeps the WAV of the call.
