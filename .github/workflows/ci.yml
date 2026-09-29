@@ -75,6 +75,52 @@ jobs:
             testpbx.log
           if-no-files-found: ignore
 
+  load:
+    # A short load run against the test PBX with Prometheus and Grafana:
+    # k6 thresholds decide pass/fail, and the whole dashboard for the run's
+    # time window is kept as a PNG report next to the k6 summary.
+    runs-on: ubuntu-latest
+    env:
+      TESTID: ci-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: build k6 and testpbx
+        run: |
+          go install go.k6.io/xk6@latest
+          mkdir -p bin reports
+          xk6 build v2.3.0 --with github.com/Dmitry-Fedotov-Dev/xk6-sip=. --output bin/k6
+          go build -o bin/testpbx ./cmd/testpbx
+      - name: start monitoring and the test PBX
+        run: |
+          docker compose -f monitoring/docker-compose.yml --profile linux-host up -d
+          ./bin/testpbx -addr 127.0.0.1:5070 -users 200 -csv examples/subscribers.csv > reports/testpbx.log 2>&1 &
+          timeout 60 bash -c 'until curl -sf http://localhost:3001/api/health >/dev/null; do sleep 2; done'
+      - name: load test
+        env:
+          K6_PROMETHEUS_RW_SERVER_URL: http://localhost:9091/api/v1/write
+          K6_FEATURES: native-histograms
+        run: |
+          echo "START=$(date +%s)" >> "$GITHUB_ENV"
+          # 0.0.0.0: Prometheus in Docker reaches the k6 process through the host gateway.
+          ./bin/k6 run -o experimental-prometheus-rw --tag testid="$TESTID" --tag pbx_version=testpbx \
+            -e VUS=20 -e DURATION=2m -e HOLD=5 -e SIP_METRICS_ADDR=0.0.0.0:6566 \
+            --summary-export reports/summary.json examples/call.js | tee reports/k6.txt
+      - name: dashboard report
+        if: always()
+        run: |
+          sleep 15 # the last remote write and scrape
+          monitoring/report.sh "$TESTID" $((START - 30)) $(($(date +%s) - 10)) reports/dashboard.png
+      - name: keep reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: load-report
+          path: reports/
+          if-no-files-found: ignore
+
   lint:
     runs-on: ubuntu-latest
     steps:

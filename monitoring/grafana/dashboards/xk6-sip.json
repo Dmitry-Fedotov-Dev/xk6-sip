@@ -1581,7 +1581,8 @@
             },
             "thresholdsStyle": {
               "mode": "dashed"
-            }
+            },
+            "axisSoftMax": 0.02
           },
           "color": {
             "mode": "palette-classic"
