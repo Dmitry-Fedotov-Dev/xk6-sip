@@ -1,5 +1,13 @@
 # xk6-sip
 
+[![k6 extension registry](https://img.shields.io/badge/k6%20extension%20registry-community-7d64ff)](https://github.com/grafana/k6-extension-registry/blob/main/registry-v2.yaml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/Dmitry-Fedotov-Dev/xk6-sip.svg)](https://pkg.go.dev/github.com/Dmitry-Fedotov-Dev/xk6-sip)
+[![CI](https://github.com/Dmitry-Fedotov-Dev/xk6-sip/actions/workflows/ci.yml/badge.svg)](https://github.com/Dmitry-Fedotov-Dev/xk6-sip/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
+Listed in the official [Grafana k6 extension registry](https://github.com/grafana/k6-extension-registry)
+(community tier) and in [awesome-k6](https://github.com/grafana/awesome-k6).
+
 k6 extension `k6/x/sip` for load testing and functional testing of PBXs and
 SIP servers with scripted subscribers: each VU owns real SIP devices that
 register, call each other through the system under test and check what
