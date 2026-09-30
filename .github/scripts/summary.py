@@ -30,11 +30,9 @@ def functional(reports, scenarios):
         first = next((n for n, good in steps if not good), failed[0] if failed else "")
         count = f"{len(steps)}" if ok else f"{passed} of {len(steps)} passed"
         rows.append(f"| {s} | {'✅' if ok else '❌'} | {count} | {cell(first)} |")
-        table = "\n".join(f"| {'✅' if good else '❌'} | {cell(n)} |" for n, good in cases)
-        details.append(
-            f"<details{'' if ok else ' open'}><summary>{'✅' if ok else '❌'} {s}</summary>\n\n"
-            f"| | Step |\n|---|---|\n{table}\n\n</details>\n"
-        )
+        if not ok:  # steps only for a failed scenario: what passed before it broke
+            table = "\n".join(f"| {'✅' if good else '❌'} | {cell(n)} |" for n, good in cases)
+            details.append(f"#### ❌ {s}\n\n| | Step |\n|---|---|\n{table}\n")
     bad = sum("| ❌ |" in r for r in rows)
     head = (f"### ❌ Functional: {bad} of {len(rows)} scenarios failed" if bad
             else f"### ✅ Functional: {len(rows)} scenarios passed")

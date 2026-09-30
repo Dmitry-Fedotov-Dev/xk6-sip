@@ -73,7 +73,7 @@ jobs:
         run: |
           mkdir -p reports
           python3 .github/scripts/summary.py functional reports $SCENARIOS > reports/summary.md
-          sed -E 's#</?(details|summary)[^>]*>##g' reports/summary.md
+          cat reports/summary.md
           cat reports/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: keep reports
         if: always()
