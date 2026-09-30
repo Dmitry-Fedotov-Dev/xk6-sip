@@ -1,12 +1,14 @@
 // Shared setup for functional scenarios: one VU, one iteration, every
-// check must pass (non-zero exit code otherwise) and a JUnit report for CI.
+// check must pass (non-zero exit code otherwise) and reports for CI:
+//   -e JUNIT=report.xml   JUnit, one test case per step and per threshold
+//   -e MARKDOWN=report.md the same as a Markdown table (GitHub job summary)
 //
 // Subscribers default to the test PBX (testpbx -users 3); point them at a
 // real PBX with -e REGISTRAR=... -e A_USER=... -e A_PASS=... -e A_EXT=...
 // (same for B_ and C_).
 import sip from 'k6/x/sip';
 import { check, fail } from 'k6';
-import { jUnit, textSummary } from 'https://jslib.k6.io/k6-summary/0.1.0/index.js';
+import { textSummary } from 'https://jslib.k6.io/k6-summary/0.1.0/index.js';
 
 export const options = {
   vus: 1,
@@ -49,11 +51,64 @@ export function call(a, b, aon = 'ext') {
   return [out, inc];
 }
 
-export function handleSummary(data) {
-  return {
-    stdout: textSummary(data, { indent: ' ', enableColors: true }),
-    [env('JUNIT', 'junit.xml')]: jUnit(data),
+// results lists the steps in the order they ran, then the thresholds:
+// { name, ok, detail }.
+function results(data) {
+  const out = [];
+  const walk = (g) => {
+    for (const c of g.checks || []) {
+      out.push({ name: c.name, ok: c.fails === 0, detail: `${c.fails} of ${c.passes + c.fails} failed` });
+    }
+    (g.groups || []).forEach(walk);
   };
+  walk(data.root_group);
+  for (const [metric, m] of Object.entries(data.metrics)) {
+    for (const [expr, t] of Object.entries(m.thresholds || {})) {
+      out.push({ name: `threshold ${metric}: ${expr}`, ok: t.ok, detail: 'threshold crossed' });
+    }
+  }
+  return out;
+}
+
+const xml = (s) => String(s).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c]);
+
+// junit is one test suite per scenario with a test case per step: step names
+// carry the actual values ("A gets 404 (got 480)"), so the report explains
+// a failure without the log. k6-summary's jUnit() only lists thresholds.
+function junit(suite, rs) {
+  const failures = rs.filter((r) => !r.ok).length;
+  const cases = rs.map((r) => {
+    const tc = `    <testcase name="${xml(r.name)}" classname="${xml(suite)}"`;
+    return r.ok ? `${tc}/>` : `${tc}>\n      <failure message="${xml(r.name)}">${xml(r.detail)}</failure>\n    </testcase>`;
+  });
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="${rs.length}" failures="${failures}">
+  <testsuite name="${xml(suite)}" tests="${rs.length}" failures="${failures}">
+${cases.join('\n')}
+  </testsuite>
+</testsuites>
+`;
+}
+
+function markdown(suite, rs) {
+  const failures = rs.filter((r) => !r.ok).length;
+  const head = failures
+    ? `### ❌ ${suite}: ${failures} of ${rs.length} failed`
+    : `### ✅ ${suite}: ${rs.length} passed`;
+  const rows = rs.map((r) => `| ${r.ok ? '✅' : '❌'} | ${r.name.replace(/\|/g, '\\|')} |`);
+  return `${head}\n\n| | Step |\n|---|---|\n${rows.join('\n')}\n\n`;
+}
+
+export function handleSummary(data) {
+  const junitPath = env('JUNIT', 'junit.xml');
+  const suite = env('SUITE', junitPath.replace(/^.*[\\/]/, '').replace(/\.xml$/, ''));
+  const rs = results(data);
+  const out = {
+    stdout: textSummary(data, { indent: ' ', enableColors: true }),
+    [junitPath]: junit(suite, rs),
+  };
+  if (__ENV.MARKDOWN) out[__ENV.MARKDOWN] = markdown(suite, rs);
+  return out;
 }
 
 // Hang up whatever a failed scenario left behind and unregister.
