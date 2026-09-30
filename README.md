@@ -248,10 +248,10 @@ supports it (reliable 18x from the PBX are always PRACKed);
 blind and attended transfer, audio quality, reject/cancel/unknown number) for
 one VU and one iteration: any failed step stops the scenario, k6 exits
 non-zero and writes a JUnit report (`-e JUNIT=...`) with one test case per
-step, actual values included, e.g. `A gets 404 (got 480)`; `-e MARKDOWN=...`
-writes the same as a table. CI runs all six against the test PBX on every
-push, shows the step tables on the run's summary page and keeps the reports
-and the WAV of failed audio checks as artifacts.
+step, actual values included, e.g. `A gets 404 (got 480)`. CI runs all six
+against the test PBX on every push, puts an overview (every scenario, every
+step, the load test's key metrics against thresholds) on the run's summary
+page and keeps the reports and the WAV of failed audio checks as artifacts.
 `audio-quality.js` has each side say its own phrase from `refs/` and checks
 that the other side hears it clearly, without drop-outs or a clipped first
 word, and doesn't hear itself; a failed audio check keeps the WAV of the call.

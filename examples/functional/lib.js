@@ -1,7 +1,6 @@
 // Shared setup for functional scenarios: one VU, one iteration, every
-// check must pass (non-zero exit code otherwise) and reports for CI:
-//   -e JUNIT=report.xml   JUnit, one test case per step and per threshold
-//   -e MARKDOWN=report.md the same as a Markdown table (GitHub job summary)
+// check must pass (non-zero exit code otherwise) and a JUnit report for CI
+// (-e JUNIT=report.xml) with one test case per step and per threshold.
 //
 // Subscribers default to the test PBX (testpbx -users 3); point them at a
 // real PBX with -e REGISTRAR=... -e A_USER=... -e A_PASS=... -e A_EXT=...
@@ -90,25 +89,13 @@ ${cases.join('\n')}
 `;
 }
 
-function markdown(suite, rs) {
-  const failures = rs.filter((r) => !r.ok).length;
-  const head = failures
-    ? `### ❌ ${suite}: ${failures} of ${rs.length} failed`
-    : `### ✅ ${suite}: ${rs.length} passed`;
-  const rows = rs.map((r) => `| ${r.ok ? '✅' : '❌'} | ${r.name.replace(/\|/g, '\\|')} |`);
-  return `${head}\n\n| | Step |\n|---|---|\n${rows.join('\n')}\n\n`;
-}
-
 export function handleSummary(data) {
   const junitPath = env('JUNIT', 'junit.xml');
   const suite = env('SUITE', junitPath.replace(/^.*[\\/]/, '').replace(/\.xml$/, ''));
-  const rs = results(data);
-  const out = {
+  return {
     stdout: textSummary(data, { indent: ' ', enableColors: true }),
-    [junitPath]: junit(suite, rs),
+    [junitPath]: junit(suite, results(data)),
   };
-  if (__ENV.MARKDOWN) out[__ENV.MARKDOWN] = markdown(suite, rs);
-  return out;
 }
 
 // Hang up whatever a failed scenario left behind and unregister.
