@@ -38,6 +38,8 @@ jobs:
     # every step checked, JUnit reports and the WAV of failed audio checks
     # kept as artifacts.
     runs-on: ubuntu-latest
+    env:
+      SCENARIOS: basic-call hold blind-transfer attended-transfer audio-quality reject-cancel
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -56,8 +58,7 @@ jobs:
           mkdir -p reports
           cd examples/functional
           failed=0
-          scenarios="basic-call hold blind-transfer attended-transfer audio-quality reject-cancel"
-          for s in $scenarios; do
+          for s in $SCENARIOS; do
             echo "::group::$s"
             if ! ../../bin/k6 run -q -e JUNIT="../../reports/$s.xml" -e RECORD_DIR=../../reports/recordings "$s.js"; then
               echo "::error title=functional::$s failed"
@@ -65,9 +66,15 @@ jobs:
             fi
             echo "::endgroup::"
           done
-          # overview and every step on the run's summary page
-          python3 ../../.github/scripts/summary.py functional ../../reports $scenarios >> "$GITHUB_STEP_SUMMARY"
           exit $failed
+      - name: summary
+        # the overview in this log, on the run's summary page and in the artifact
+        if: always()
+        run: |
+          mkdir -p reports
+          python3 .github/scripts/summary.py functional reports $SCENARIOS > reports/summary.md
+          sed -E 's#</?(details|summary)[^>]*>##g' reports/summary.md
+          cat reports/summary.md >> "$GITHUB_STEP_SUMMARY"
       - name: keep reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -117,11 +124,14 @@ jobs:
           sleep 15 # the last remote write and scrape
           bash monitoring/report.sh "$TESTID" $((START - 30)) $(($(date +%s) - 10)) reports/dashboard.png
       - name: summary
+        # the key metrics in this log, on the run's summary page and in the artifact
         if: always()
         run: |
           if [ -f reports/summary.json ]; then
             python3 .github/scripts/summary.py load reports/summary.json \
-              "20 VUs for 2 minutes against the test PBX, audio compared on every call." >> "$GITHUB_STEP_SUMMARY"
+              "20 VUs for 2 minutes against the test PBX, audio compared on every call." > reports/summary.md
+            cat reports/summary.md
+            cat reports/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: keep reports
         if: always()
