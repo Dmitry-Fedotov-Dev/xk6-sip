@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Markdown for the CI run summary page ($GITHUB_STEP_SUMMARY).
 
-  summary.py functional <reports dir> <scenario>...   from the JUnit reports
+  summary.py functional [--all-steps] <reports dir> <scenario>...   from the JUnit reports
+      steps of failed scenarios only; --all-steps adds passed ones, folded
   summary.py load <summary.json> <title>              from k6 --summary-export
 """
 import json
@@ -14,7 +15,7 @@ def cell(s):
     return str(s).replace("|", "\\|")
 
 
-def functional(reports, scenarios):
+def functional(reports, scenarios, all_steps):
     rows, details = [], []
     for s in scenarios:
         path = os.path.join(reports, f"{s}.xml")
@@ -30,9 +31,13 @@ def functional(reports, scenarios):
         first = next((n for n, good in steps if not good), failed[0] if failed else "")
         count = f"{len(steps)}" if ok else f"{passed} of {len(steps)} passed"
         rows.append(f"| {s} | {'✅' if ok else '❌'} | {count} | {cell(first)} |")
-        if not ok:  # steps only for a failed scenario: what passed before it broke
-            table = "\n".join(f"| {'✅' if good else '❌'} | {cell(n)} |" for n, good in cases)
-            details.append(f"#### ❌ {s}\n\n| | Step |\n|---|---|\n{table}\n")
+        table = "\n".join(f"| {'✅' if good else '❌'} | {cell(n)} |" for n, good in cases)
+        steps_md = f"| | Step |\n|---|---|\n{table}\n"
+        if all_steps:  # summary page: every scenario, passed ones folded
+            details.append(f"<details{'' if ok else ' open'}><summary>{'✅' if ok else '❌'} {s}</summary>\n\n"
+                           f"{steps_md}\n</details>\n")
+        elif not ok:  # job log: steps only for a failed scenario, what passed before it broke
+            details.append(f"#### ❌ {s}\n\n{steps_md}")
     bad = sum("| ❌ |" in r for r in rows)
     head = (f"### ❌ Functional: {bad} of {len(rows)} scenarios failed" if bad
             else f"### ✅ Functional: {len(rows)} scenarios passed")
@@ -101,7 +106,8 @@ def load(path, title):
 
 if __name__ == "__main__":
     if len(sys.argv) >= 3 and sys.argv[1] == "functional":
-        functional(sys.argv[2], sys.argv[3:])
+        args = [a for a in sys.argv[2:] if a != "--all-steps"]
+        functional(args[0], args[1:], "--all-steps" in sys.argv)
     elif len(sys.argv) == 4 and sys.argv[1] == "load":
         load(sys.argv[2], sys.argv[3])
     else:
