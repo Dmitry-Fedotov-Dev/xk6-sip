@@ -11,13 +11,13 @@ on:
 
 jobs:
   test:
-    uses: Dmitry-Fedotov-Dev/ci/.github/workflows/go.yml@next
+    uses: Dmitry-Fedotov-Dev/ci/.github/workflows/go.yml@v1
 
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: Dmitry-Fedotov-Dev/ci/actions/xk6-build@next
+      - uses: Dmitry-Fedotov-Dev/ci/actions/xk6-build@v1
         with:
           with: github.com/Dmitry-Fedotov-Dev/xk6-sip=.
           output: k6
@@ -31,7 +31,7 @@ jobs:
       SCENARIOS: basic-call hold blind-transfer attended-transfer audio-quality reject-cancel
     steps:
       - uses: actions/checkout@v7
-      - uses: Dmitry-Fedotov-Dev/ci/actions/xk6-build@next
+      - uses: Dmitry-Fedotov-Dev/ci/actions/xk6-build@v1
         with:
           with: github.com/Dmitry-Fedotov-Dev/xk6-sip=.
       - name: build testpbx
@@ -56,7 +56,7 @@ jobs:
         # the overview in this log (steps of failed scenarios), on the run's
         # summary page and in the artifact (steps of every scenario)
         if: always()
-        uses: Dmitry-Fedotov-Dev/ci/actions/k6-summary@next
+        uses: Dmitry-Fedotov-Dev/ci/actions/k6-summary@v1
         with:
           kind: functional
           reports: reports
@@ -81,7 +81,7 @@ jobs:
       TESTID: ci-${{ github.run_id }}
     steps:
       - uses: actions/checkout@v7
-      - uses: Dmitry-Fedotov-Dev/ci/actions/xk6-build@next
+      - uses: Dmitry-Fedotov-Dev/ci/actions/xk6-build@v1
         with:
           with: github.com/Dmitry-Fedotov-Dev/xk6-sip=.
       - name: build testpbx
@@ -111,7 +111,7 @@ jobs:
       - name: summary
         # the key metrics in this log, on the run's summary page and in the artifact
         if: always()
-        uses: Dmitry-Fedotov-Dev/ci/actions/k6-summary@next
+        uses: Dmitry-Fedotov-Dev/ci/actions/k6-summary@v1
         with:
           kind: load
           reports: reports/summary.json
