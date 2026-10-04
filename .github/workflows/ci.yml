@@ -5,33 +5,22 @@ on:
     branches: [main]
   pull_request:
 
+# Shared steps (Go checks, the k6 build, result summaries) come from
+# github.com/Dmitry-Fedotov-Dev/ci; what stays here is this extension's own:
+# the test PBX, call-flow scenarios, the load run and xk6 lint.
+
 jobs:
   test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-      - name: gofmt
-        run: test -z "$(gofmt -l .)"
-      - name: vet
-        run: go vet ./...
-      - name: test
-        run: go test -race -count=1 ./...
+    uses: Dmitry-Fedotov-Dev/ci/.github/workflows/go.yml@v1
 
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: Dmitry-Fedotov-Dev/ci/actions/xk6-build@v1
         with:
-          go-version: stable
-      - name: xk6 build
-        run: |
-          go install go.k6.io/xk6@latest
-          xk6 build v2.3.0 --with github.com/Dmitry-Fedotov-Dev/xk6-sip=. --output k6
-          ./k6 version
+          with: github.com/Dmitry-Fedotov-Dev/xk6-sip=.
+          output: k6
 
   functional:
     # Call-flow scenarios from examples/functional against the test PBX:
@@ -42,15 +31,11 @@ jobs:
       SCENARIOS: basic-call hold blind-transfer attended-transfer audio-quality reject-cancel
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: Dmitry-Fedotov-Dev/ci/actions/xk6-build@v1
         with:
-          go-version: stable
-      - name: build k6 and testpbx
-        run: |
-          go install go.k6.io/xk6@latest
-          mkdir -p bin
-          xk6 build v2.3.0 --with github.com/Dmitry-Fedotov-Dev/xk6-sip=. --output bin/k6
-          go build -o bin/testpbx ./cmd/testpbx
+          with: github.com/Dmitry-Fedotov-Dev/xk6-sip=.
+      - name: build testpbx
+        run: go build -o bin/testpbx ./cmd/testpbx
       - name: run scenarios
         run: |
           ./bin/testpbx -addr 127.0.0.1:5070 -users 3 > testpbx.log 2>&1 &
@@ -71,11 +56,12 @@ jobs:
         # the overview in this log (steps of failed scenarios), on the run's
         # summary page and in the artifact (steps of every scenario)
         if: always()
-        run: |
-          mkdir -p reports
-          python3 .github/scripts/summary.py functional reports $SCENARIOS
-          python3 .github/scripts/summary.py functional --all-steps reports $SCENARIOS > reports/summary.md
-          cat reports/summary.md >> "$GITHUB_STEP_SUMMARY"
+        uses: Dmitry-Fedotov-Dev/ci/actions/k6-summary@v1
+        with:
+          kind: functional
+          reports: reports
+          scenarios: ${{ env.SCENARIOS }}
+          output: reports/summary.md
       - name: keep reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -95,14 +81,12 @@ jobs:
       TESTID: ci-${{ github.run_id }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: Dmitry-Fedotov-Dev/ci/actions/xk6-build@v1
         with:
-          go-version: stable
-      - name: build k6 and testpbx
+          with: github.com/Dmitry-Fedotov-Dev/xk6-sip=.
+      - name: build testpbx
         run: |
-          go install go.k6.io/xk6@latest
-          mkdir -p bin reports
-          xk6 build v2.3.0 --with github.com/Dmitry-Fedotov-Dev/xk6-sip=. --output bin/k6
+          mkdir -p reports
           go build -o bin/testpbx ./cmd/testpbx
       - name: start monitoring and the test PBX
         run: |
@@ -127,13 +111,13 @@ jobs:
       - name: summary
         # the key metrics in this log, on the run's summary page and in the artifact
         if: always()
-        run: |
-          if [ -f reports/summary.json ]; then
-            python3 .github/scripts/summary.py load reports/summary.json \
-              "20 VUs for 2 minutes against the test PBX, audio compared on every call." > reports/summary.md
-            cat reports/summary.md
-            cat reports/summary.md >> "$GITHUB_STEP_SUMMARY"
-          fi
+        uses: Dmitry-Fedotov-Dev/ci/actions/k6-summary@v1
+        with:
+          kind: load
+          reports: reports/summary.json
+          title: 20 VUs for 2 minutes against the test PBX, audio compared on every call.
+          note: The whole dashboard for the run — `dashboard.png` in the **load-report** artifact.
+          output: reports/summary.md
       - name: keep reports
         if: always()
         uses: actions/upload-artifact@v7
